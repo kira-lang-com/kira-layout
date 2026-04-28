@@ -1,0 +1,24 @@
+/// Primitive geometry types - core building blocks
+struct Point {
+    var x: Float = 0.0
+    var y: Float = 0.0
+}
+
+struct Size {
+    var width: Float = 0.0
+    var height: Float = 0.0
+}
+
+struct EdgeInsets {
+    var top: Float = 0.0
+    var trailing: Float = 0.0
+    var bottom: Float = 0.0
+    var leading: Float = 0.0
+}
+
+struct Rect {
+    var x: Float = 0.0
+    var y: Float = 0.0
+    var width: Float = 0.0
+    var height: Float = 0.0
+}

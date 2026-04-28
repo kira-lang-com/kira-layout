@@ -1,0 +1,53 @@
+/// Internal computation helpers
+function computeContentSize(node: LayoutNode) -> Size {
+    var maxWidth = 0.0
+    var maxHeight = 0.0
+    var i = 0
+    while i < node.children.count {
+        let child = node.children[i]
+        maxWidth = maxWidth > child.measuredSize.width ? maxWidth : child.measuredSize.width
+        maxHeight = maxHeight > child.measuredSize.height ? maxHeight : child.measuredSize.height
+        i = i + 1
+    }
+    return Size(width: maxWidth, height: maxHeight)
+}
+
+/// Two-pass layout algorithm: measure bottom-up, place top-down
+struct LayoutEngine {
+    function measure(node: LayoutNode, available: Size) -> Size {
+        let desc = node.descriptor
+        let innerWidth = (available.width - desc.padding.leading) - desc.padding.trailing
+        let innerHeight = (available.height - desc.padding.top) - desc.padding.bottom
+        let innerSize = Size(width: innerWidth, height: innerHeight)
+
+        var i = 0
+        while i < node.children.count {
+            let child = node.children[i]
+            child.measuredSize = measure(node: child, available: innerSize)
+            i = i + 1
+        }
+
+        let contentSize = computeContentSize(node: node)
+        let resolvedWidth = contentSize.width
+        let resolvedHeight = contentSize.height
+        let finalWidth = (resolvedWidth + desc.padding.leading) + desc.padding.trailing
+        let finalHeight = (resolvedHeight + desc.padding.top) + desc.padding.bottom
+        let finalSize = Size(width: finalWidth, height: finalHeight)
+        node.measuredSize = finalSize
+        return finalSize
+    }
+
+    function place(node: LayoutNode, origin: Point) {
+        node.placedOrigin = origin
+        let desc = node.descriptor
+        let innerOrigin = Point(x: origin.x + desc.padding.leading, y: origin.y + desc.padding.top)
+
+        var i = 0
+        while i < node.children.count {
+            let child = node.children[i]
+            let childOrigin = Point(x: innerOrigin.x + child.descriptor.x, y: innerOrigin.y + child.descriptor.y)
+            place(node: child, origin: childOrigin)
+            i = i + 1
+        }
+    }
+}

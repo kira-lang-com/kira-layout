@@ -1,0 +1,19 @@
+/// Layout model - descriptor and node tree
+struct LayoutDescriptor {
+    var width: SizeMode
+    var height: SizeMode
+    var arrange: ArrangeMode
+    var padding: EdgeInsets
+    var margin: EdgeInsets
+    var x: Float = 0.0
+    var y: Float = 0.0
+    var zIndex: Int = 0
+    var clipContent: Bool = false
+}
+
+struct LayoutNode {
+    var descriptor: LayoutDescriptor
+    var children: [LayoutNode]
+    var measuredSize: Size
+    var placedOrigin: Point
+}

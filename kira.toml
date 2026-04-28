@@ -1,0 +1,10 @@
+[package]
+name = "KiraLayout"
+version = "0.1.0"
+kind = "library"
+kira = "0.1.0"
+module_root = "KiraLayout"
+
+[defaults]
+execution_mode = "vm"
+build_target = "host"

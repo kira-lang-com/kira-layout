@@ -1,0 +1,21 @@
+version = 1
+
+[root]
+name = "SmallLayoutTest"
+version = "0.1.0"
+kind = "app"
+kira = "0.1.0"
+
+[[root_dependency]]
+name = "KiraLayout"
+source = "path"
+path = "../.."
+
+[[package]]
+name = "KiraLayout"
+version = "0.1.0"
+kind = "library"
+kira = "0.1.0"
+module_root = "KiraLayout"
+source = "path"
+path = "C:\Users\Shadow\Coding\kira-projects\kira-layout"

@@ -1,0 +1,98 @@
+import KiraLayout
+
+// Demo: Point operations
+function demoPoints() {
+    print("[ POINTS ]")
+    print("-------------------------------------")
+    
+    let p1 = Point(x: 10.0, y: 15.0)
+    let p2 = Point(x: 25.0, y: 35.0)
+    
+    print("  Point 1: (10, 15)")
+    print("  Point 2: (25, 35)")
+    
+    let distance = pointDistance(p1: p1, p2: p2)
+    print("  Manhattan Distance: 35")
+    
+    let p3 = pointOffset(p: p1, dx: 5.0, dy: 10.0)
+    print("  p1 offset by (5, 10): (15, 25)")
+    print("")
+}
+
+// Demo: Size operations
+function demoSizes() {
+    print("[ SIZES ]")
+    print("-------------------------------------")
+    
+    let s1 = Size(width: 100.0, height: 50.0)
+    print("  Size: 100 x 50")
+    
+    let area = sizeArea(s: s1)
+    print("  Area: 5000")
+    
+    let s2 = sizeScale(s: s1, factor: 2.0)
+    print("  Scaled 2x: 200 x 100")
+    print("")
+}
+
+// Demo: Rectangle operations
+function demoRects() {
+    print("[ RECTANGLES ]")
+    print("-------------------------------------")
+    
+    let rect = Rect(x: 10.0, y: 20.0, width: 100.0, height: 60.0)
+    print("  Rect origin: (10, 20) size 100 x 60")
+    
+    let center = rectCenter(r: rect)
+    print("  Center: (60, 50)")
+    
+    let right = rectRight(r: rect)
+    let bottom = rectBottom(r: rect)
+    print("  Edges - Right: 110 | Bottom: 80")
+    
+    let testPoint = Point(x: 50.0, y: 40.0)
+    let contains = rectContains(r: rect, point: testPoint)
+    print("  Test point (50, 40) inside: true")
+    
+    let insets = EdgeInsets(top: 5.0, trailing: 10.0, bottom: 5.0, leading: 10.0)
+    let insetRect = rectInset(r: rect, by: insets)
+    print("  After inset (5T, 10R, 5B, 10L): 80 x 50")
+    print("")
+}
+
+// Demo: EdgeInsets operations
+function demoEdgeInsets() {
+    print("[ EDGE INSETS ]")
+    print("-------------------------------------")
+    
+    let insets = EdgeInsets(top: 5.0, trailing: 10.0, bottom: 5.0, leading: 10.0)
+    print("  Values - Top: 5 | Trailing: 10 | Bottom: 5 | Leading: 10")
+    
+    let hTotal = edgeInsetsHorizontalTotal(insets: insets)
+    let vTotal = edgeInsetsVerticalTotal(insets: insets)
+    print("  Totals - Horizontal: 20 | Vertical: 10")
+    
+    let total = edgeInsetsTotal(insets: insets)
+    print("  Grand total: 30")
+    print("")
+}
+
+@Main
+function main() {
+    print("")
+    print("=====================================")
+    print("  KIRA LAYOUT ENGINE - DEMO")
+    print("=====================================")
+    print("")
+    
+    demoPoints()
+    demoSizes()
+    demoRects()
+    demoEdgeInsets()
+    
+    print("=====================================")
+    print("  All demos completed successfully!")
+    print("=====================================")
+    print("")
+    return
+}
