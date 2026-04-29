@@ -32,29 +32,11 @@ enum SizeMode {
     Max(Float)
 }
 
-struct StackOptions {
-    var axis: Axis
-    var spacing: Float
-    var alignment: CrossAlignment
-}
-
-struct GridOptions {
-    var columns: Int
-    var spacing: Float
-    var rowSpacing: Float
-}
-
-struct WrapOptions {
-    var spacing: Float
-    var rowSpacing: Float
-    var alignment: CrossAlignment
-}
-
 enum ArrangeMode {
-    Stack(StackOptions)
+    Stack
     Absolute
-    Grid(GridOptions)
-    Wrap(WrapOptions)
-    Overlay(Alignment)
+    Grid
+    Wrap
+    Overlay
     Fill
 }

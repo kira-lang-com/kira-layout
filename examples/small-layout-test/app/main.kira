@@ -1,79 +1,129 @@
 import KiraLayout
 
-// Demo: Point operations
-function demoPoints() {
-    print("[ POINTS ]")
+function emptyInsets() -> EdgeInsets {
+    return EdgeInsets(top: 0.0, trailing: 0.0, bottom: 0.0, leading: 0.0)
+}
+
+function fixedLeaf(width: Float, height: Float, margin: EdgeInsets) -> LayoutNode {
+    return LayoutNode(
+        descriptor: LayoutDescriptor(
+            width: SizeMode.Fixed(width),
+            height: SizeMode.Fixed(height),
+            arrange: ArrangeMode.Fill,
+            axis: Axis.Vertical,
+            spacing: 0.0,
+            rowSpacing: 0.0,
+            alignment: CrossAlignment.Start,
+            overlayAlignment: Alignment.Center,
+            columns: 1,
+            padding: emptyInsets(),
+            margin: margin,
+            x: 0.0,
+            y: 0.0,
+            zIndex: 0,
+            clipContent: false
+        ),
+        measuredSize: Size(width: 0.0, height: 0.0),
+        placedOrigin: Point(x: 0.0, y: 0.0),
+        firstChild: 0,
+        childCount: 0
+    )
+}
+
+function stackDescriptor() -> LayoutDescriptor {
+    return LayoutDescriptor(
+        width: SizeMode.Fixed(240.0),
+        height: SizeMode.Fixed(160.0),
+        arrange: ArrangeMode.Stack,
+        axis: Axis.Vertical,
+        spacing: 8.0,
+        rowSpacing: 0.0,
+        alignment: CrossAlignment.Stretch,
+        overlayAlignment: Alignment.Center,
+        columns: 1,
+        padding: EdgeInsets(top: 10.0, trailing: 12.0, bottom: 10.0, leading: 12.0),
+        margin: emptyInsets(),
+        x: 0.0,
+        y: 0.0,
+        zIndex: 0,
+        clipContent: false
+    )
+}
+
+function overlayDescriptor() -> LayoutDescriptor {
+    return LayoutDescriptor(
+        width: SizeMode.Fixed(100.0),
+        height: SizeMode.Fixed(60.0),
+        arrange: ArrangeMode.Overlay,
+        axis: Axis.Vertical,
+        spacing: 0.0,
+        rowSpacing: 0.0,
+        alignment: CrossAlignment.Center,
+        overlayAlignment: Alignment.BottomTrailing,
+        columns: 1,
+        padding: emptyInsets(),
+        margin: EdgeInsets(top: 4.0, trailing: 2.0, bottom: 4.0, leading: 2.0),
+        x: 0.0,
+        y: 0.0,
+        zIndex: 0,
+        clipContent: false
+    )
+}
+
+function demoLayoutEngine() {
+    let card = fixedLeaf(width: 80.0, height: 24.0, margin: EdgeInsets(top: 0.0, trailing: 0.0, bottom: 4.0, leading: 0.0))
+    let filler = fixedLeaf(width: 20.0, height: 20.0, margin: emptyInsets())
+    let badge = fixedLeaf(width: 30.0, height: 16.0, margin: emptyInsets())
+    let overlay = LayoutNode(
+        descriptor: overlayDescriptor(),
+        measuredSize: Size(width: 0.0, height: 0.0),
+        placedOrigin: Point(x: 0.0, y: 0.0),
+        firstChild: 4,
+        childCount: 1
+    )
+    let root = LayoutNode(
+        descriptor: stackDescriptor(),
+        measuredSize: Size(width: 0.0, height: 0.0),
+        placedOrigin: Point(x: 0.0, y: 0.0),
+        firstChild: 1,
+        childCount: 3
+    )
+    var tree = LayoutTree(nodes: [root, card, filler, overlay, badge])
+
+    let engine = LayoutEngine()
+    tree = engine.measure(tree: tree, index: 0, available: Size(width: 240.0, height: 160.0))
+    tree = engine.place(tree: tree, index: 0, origin: Point(x: 5.0, y: 7.0))
+    let measuredRoot = tree.nodes[0]
+    let measured = measuredRoot.measuredSize
+
+    print("[ LAYOUT ENGINE ]")
     print("-------------------------------------")
-    
-    let p1 = Point(x: 10.0, y: 15.0)
-    let p2 = Point(x: 25.0, y: 35.0)
-    
-    print("  Point 1: (10, 15)")
-    print("  Point 2: (25, 35)")
-    
-    let distance = pointDistance(p1: p1, p2: p2)
-    print("  Manhattan Distance: 35")
-    
-    let p3 = pointOffset(p: p1, dx: 5.0, dy: 10.0)
-    print("  p1 offset by (5, 10): (15, 25)")
+    print("  Root fixed size: 240 x 160")
+    print("  Measured size computed")
+    print("  Stack, padding, margins, stretch, overlay all executed")
+
+    if measured.width == 240.0 && measured.height == 160.0 {
+        print("  Measurement: ok")
+    } else {
+        print("  Measurement: unexpected")
+    }
     print("")
 }
 
-// Demo: Size operations
-function demoSizes() {
-    print("[ SIZES ]")
-    print("-------------------------------------")
-    
-    let s1 = Size(width: 100.0, height: 50.0)
-    print("  Size: 100 x 50")
-    
-    let area = sizeArea(s: s1)
-    print("  Area: 5000")
-    
-    let s2 = sizeScale(s: s1, factor: 2.0)
-    print("  Scaled 2x: 200 x 100")
-    print("")
-}
-
-// Demo: Rectangle operations
-function demoRects() {
-    print("[ RECTANGLES ]")
-    print("-------------------------------------")
-    
+function demoGeometry() {
     let rect = Rect(x: 10.0, y: 20.0, width: 100.0, height: 60.0)
-    print("  Rect origin: (10, 20) size 100 x 60")
-    
-    let center = rectCenter(r: rect)
-    print("  Center: (60, 50)")
-    
-    let right = rectRight(r: rect)
-    let bottom = rectBottom(r: rect)
-    print("  Edges - Right: 110 | Bottom: 80")
-    
-    let testPoint = Point(x: 50.0, y: 40.0)
-    let contains = rectContains(r: rect, point: testPoint)
-    print("  Test point (50, 40) inside: true")
-    
     let insets = EdgeInsets(top: 5.0, trailing: 10.0, bottom: 5.0, leading: 10.0)
     let insetRect = rectInset(r: rect, by: insets)
-    print("  After inset (5T, 10R, 5B, 10L): 80 x 50")
-    print("")
-}
+    let center = rectCenter(r: rect)
 
-// Demo: EdgeInsets operations
-function demoEdgeInsets() {
-    print("[ EDGE INSETS ]")
+    print("[ GEOMETRY ]")
     print("-------------------------------------")
-    
-    let insets = EdgeInsets(top: 5.0, trailing: 10.0, bottom: 5.0, leading: 10.0)
-    print("  Values - Top: 5 | Trailing: 10 | Bottom: 5 | Leading: 10")
-    
-    let hTotal = edgeInsetsHorizontalTotal(insets: insets)
-    let vTotal = edgeInsetsVerticalTotal(insets: insets)
-    print("  Totals - Horizontal: 20 | Vertical: 10")
-    
-    let total = edgeInsetsTotal(insets: insets)
-    print("  Grand total: 30")
+    print("  Rect center and inset computed")
+    if center.x == 60.0 && center.y == 50.0 && insetRect.width == 80.0 && insetRect.height == 50.0 {
+        print("  Geometry: ok")
+    } else {
+        print("  Geometry: unexpected")
+    }
     print("")
 }
 
@@ -84,12 +134,10 @@ function main() {
     print("  KIRA LAYOUT ENGINE - DEMO")
     print("=====================================")
     print("")
-    
-    demoPoints()
-    demoSizes()
-    demoRects()
-    demoEdgeInsets()
-    
+
+    demoGeometry()
+    demoLayoutEngine()
+
     print("=====================================")
     print("  All demos completed successfully!")
     print("=====================================")

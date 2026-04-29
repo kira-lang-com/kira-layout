@@ -6,129 +6,77 @@
 
 # KiraLayout
 
-A modern, type-safe layout engine for the Kira programming language. Provides a two-pass measurement and placement algorithm with support for flexible sizing modes, multiple arrangement strategies, and comprehensive geometric utilities.
+A modern, type-safe layout engine for the Kira programming language. It provides a two-pass measurement and placement algorithm with flexible sizing modes, multiple arrangement strategies, and geometry utilities.
 
 ## Features
 
 - **Two-Pass Algorithm**: Measure bottom-up, place top-down for predictable layout computation
 - **Flexible Sizing**: Fixed, Fill, Hug, Fraction, Min, and Max sizing modes
-- **Arrangement Strategies**: Stack (row/column), Grid, Wrap, Absolute, Overlay, and Fill layouts
-- **Comprehensive Utilities**: Geometry operations for Points, Sizes, Rects, and EdgeInsets
-- **Type-Safe**: Leverages Kira's static typing for correctness
-- **Modular Structure**: Clean separation of concerns with organized file structure
+- **Arrangement Strategies**: Stack, Grid, Wrap, Absolute, Overlay, and Fill layouts
+- **Spacing Support**: Padding, margin, stack spacing, row spacing, and stretch alignment
+- **Frame Inspection**: Retrieve final node frames from a measured and placed tree
+- **Geometry Utilities**: Operations for Points, Sizes, Rects, and EdgeInsets
 
 ## Directory Structure
 
-```
+```text
 app/
-├── Primitives/       # Core geometry types (Point, Size, Rect, EdgeInsets)
-├── Layout/           # Layout types, arrangements, and node models
-├── Utils/            # Utility functions for geometric operations
-└── Engine/           # Layout engine with measure/place algorithm
+├── Primitives/       # Core geometry types
+├── Layout/           # Descriptors, node/tree model, arrangement enums
+├── Utils/            # Geometry helper functions
+└── Engine/           # Two-pass layout engine and sizing helpers
 ```
 
 ## Quick Start
 
-### Build
-
 ```bash
 kira check
-```
-
-### Run Example
-
-```bash
 cd examples/small-layout-test
 kira run
 ```
 
-The example demonstrates all geometry operations with clean, formatted output showing calculations for points, sizes, rectangles, and edge insets.
+The example demonstrates geometry utilities and a real layout tree that runs through measurement and placement.
 
 ## Core Types
 
-### Primitives
+- **Point**: 2D coordinate
+- **Size**: Width and height
+- **Rect**: Origin plus size
+- **EdgeInsets**: Top, trailing, bottom, and leading spacing
+- **SizeMode**: Fixed, Fill, Hug, Fraction, Min, Max
+- **ArrangeMode**: Stack, Absolute, Grid, Wrap, Overlay, Fill
+- **LayoutNode**: Flat tree node with descriptor, measured size, placed origin, and child range
+- **LayoutTree**: Executable node storage used by the layout engine
 
-- **Point**: 2D coordinate (x, y)
-- **Size**: Dimensions (width, height)
-- **Rect**: Rectangle (x, y, width, height)
-- **EdgeInsets**: Spacing (top, trailing, bottom, leading)
-
-### Layout
-
-- **Axis**: Horizontal / Vertical
-- **SizeMode**: Fixed | Fill | Hug | Fraction | Min | Max
-- **ArrangeMode**: Stack | Grid | Wrap | Absolute | Overlay | Fill
-- **LayoutNode**: Tree node with descriptor, children, measured size, and placed origin
-
-## API Overview
-
-### Geometry Utilities
-
-```kira
-// Points
-pointDistance(p1: Point, p2: Point) -> Float
-pointOffset(p: Point, dx: Float, dy: Float) -> Point
-
-// Sizes
-sizeArea(s: Size) -> Float
-sizeScale(s: Size, factor: Float) -> Size
-
-// Rects
-rectCenter(r: Rect) -> Point
-rectContains(r: Rect, point: Point) -> Bool
-rectIntersects(r: Rect, other: Rect) -> Bool
-rectInset(r: Rect, by: EdgeInsets) -> Rect
-rectRight(r: Rect) -> Float
-rectBottom(r: Rect) -> Float
-
-// EdgeInsets
-edgeInsetsHorizontalTotal(insets: EdgeInsets) -> Float
-edgeInsetsVerticalTotal(insets: EdgeInsets) -> Float
-edgeInsetsTotal(insets: EdgeInsets) -> Float
-```
-
-### Layout Engine
+## Layout Engine
 
 ```kira
 struct LayoutEngine {
-    function measure(node: LayoutNode, available: Size) -> Size
-    function place(node: LayoutNode, origin: Point)
+    function measure(tree: LayoutTree, index: Int, available: Size) -> LayoutTree
+    function place(tree: LayoutTree, index: Int, origin: Point) -> LayoutTree
 }
 ```
 
+`measure` and `place` return updated trees. This matches Kira's current value-oriented execution model and avoids relying on reference mutation for nested nodes.
+
 ## Example Output
 
-```
+```text
 =====================================
   KIRA LAYOUT ENGINE - DEMO
 =====================================
 
-[ POINTS ]
+[ GEOMETRY ]
 -------------------------------------
-  Point 1: (10, 15)
-  Point 2: (25, 35)
-  Manhattan Distance: 35
-  p1 offset by (5, 10): (15, 25)
+  Rect center and inset computed
+  Geometry: ok
 
-[ SIZES ]
+[ LAYOUT ENGINE ]
 -------------------------------------
-  Size: 100 x 50
-  Area: 5000
-  Scaled 2x: 200 x 100
-
-[ RECTANGLES ]
--------------------------------------
-  Rect origin: (10, 20) size 100 x 60
-  Center: (60, 50)
-  Edges - Right: 110 | Bottom: 80
-  Test point (50, 40) inside: true
-  After inset (5T, 10R, 5B, 10L): 80 x 50
-
-[ EDGE INSETS ]
--------------------------------------
-  Values - Top: 5 | Trailing: 10 | Bottom: 5 | Leading: 10
-  Totals - Horizontal: 20 | Vertical: 10
-  Grand total: 30
+  Root fixed size: 240 x 160
+  Measured size computed
+  Stack, padding, margins, stretch, overlay all executed
+  Measurement: ok
 
 =====================================
   All demos completed successfully!
@@ -137,12 +85,12 @@ struct LayoutEngine {
 
 ## Implementation Notes
 
-- The layout engine currently performs basic content-hugging sizing. SizeMode resolution can be extended to support all sizing strategies.
-- Arrangement logic (Stack, Grid, Wrap) is defined as types and ready for implementation in the measure/place passes.
-- The modular structure allows independent development and testing of each component.
+- `SizeMode.Fixed` and `SizeMode.Fill` resolve as outer sizes.
+- `SizeMode.Hug`, `Min`, and `Max` include content plus padding.
+- Stack, Absolute, Grid, Wrap, Overlay, and Fill are implemented in both measure and place.
+- The tree is flat (`LayoutTree.nodes` plus `firstChild` / `childCount`) because current executable Kira does not accept empty array literals for leaf child lists.
+- Integer-to-float layout math uses an explicit helper because `Float(...)` casts are not currently available in this compiler.
 
 ## License
 
-Licensed under the Apache License, Version 2.0 ([LICENSE](LICENSE) or http://www.apache.org/licenses/LICENSE-2.0)
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+Licensed under the Apache License, Version 2.0 ([LICENSE](LICENSE) or http://www.apache.org/licenses/LICENSE-2.0).

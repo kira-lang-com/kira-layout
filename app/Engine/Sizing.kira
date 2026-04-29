@@ -1,0 +1,55 @@
+function nonNegative(value: Float) -> Float {
+    return value > 0.0 ? value : 0.0
+}
+
+function intAsFloat(value: Int) -> Float {
+    var result = 0.0
+    var i = 0
+    while i < value {
+        result = result + 1.0
+        i = i + 1
+    }
+    return result
+}
+
+function repeatedSpacing(count: Int, spacing: Float) -> Float {
+    if count <= 1 {
+        return 0.0
+    }
+    return intAsFloat(value: count - 1) * spacing
+}
+
+function outerWidth(node: LayoutNode) -> Float {
+    return node.measuredSize.width + edgeInsetsHorizontalTotal(insets: node.descriptor.margin)
+}
+
+function outerHeight(node: LayoutNode) -> Float {
+    return node.measuredSize.height + edgeInsetsVerticalTotal(insets: node.descriptor.margin)
+}
+
+function childAvailableSize(parentAvailable: Size, parent: LayoutDescriptor, child: LayoutNode, childCount: Int) -> Size {
+    let margin = child.descriptor.margin
+    var width = parentAvailable.width
+    var height = parentAvailable.height
+
+    if parent.arrange == ArrangeMode.Stack {
+        let totalSpacing = repeatedSpacing(count: childCount, spacing: parent.spacing)
+        if parent.axis == Axis.Horizontal {
+            width = width - totalSpacing
+        } else {
+            height = height - totalSpacing
+        }
+    }
+
+    if parent.arrange == ArrangeMode.Grid {
+        if parent.columns > 0 {
+            let totalSpacing = repeatedSpacing(count: parent.columns, spacing: parent.spacing)
+            width = (width - totalSpacing) / intAsFloat(value: parent.columns)
+        }
+    }
+
+    return Size(
+        width: nonNegative(value: width - edgeInsetsHorizontalTotal(insets: margin)),
+        height: nonNegative(value: height - edgeInsetsVerticalTotal(insets: margin))
+    )
+}
