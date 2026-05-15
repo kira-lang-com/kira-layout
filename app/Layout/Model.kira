@@ -29,12 +29,12 @@ struct LayoutTree {
     var nodes: [LayoutNode]
 }
 
-function layoutFrame(tree: LayoutTree, index: Int) -> Rect {
+function layoutFrame(tree: borrow LayoutTree, index: Int) -> Rect {
     let node = tree.nodes[index]
     return Rect(x: node.placedOrigin.x, y: node.placedOrigin.y, width: node.measuredSize.width, height: node.measuredSize.height)
 }
 
-function layoutNodeWithSize(node: LayoutNode, size: Size) -> LayoutNode {
+function layoutNodeWithSize(node: borrow LayoutNode, size: borrow Size) -> LayoutNode {
     return LayoutNode(
         descriptor: node.descriptor,
         measuredSize: size,
@@ -44,7 +44,7 @@ function layoutNodeWithSize(node: LayoutNode, size: Size) -> LayoutNode {
     )
 }
 
-function layoutNodeWithOrigin(node: LayoutNode, origin: Point) -> LayoutNode {
+function layoutNodeWithOrigin(node: borrow LayoutNode, origin: borrow Point) -> LayoutNode {
     return LayoutNode(
         descriptor: node.descriptor,
         measuredSize: node.measuredSize,

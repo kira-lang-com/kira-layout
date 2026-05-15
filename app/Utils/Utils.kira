@@ -1,5 +1,5 @@
 /// Utility functions for geometry operations
-function pointDistance(p1: Point, p2: Point) -> Float {
+function pointDistance(p1: borrow Point, p2: borrow Point) -> Float {
     let dx = p1.x - p2.x
     let dy = p1.y - p2.y
     let adx = dx < 0.0 ? 0.0 - dx : dx
@@ -7,52 +7,52 @@ function pointDistance(p1: Point, p2: Point) -> Float {
     return adx + ady
 }
 
-function pointOffset(p: Point, dx: Float, dy: Float) -> Point {
+function pointOffset(p: borrow Point, dx: Float, dy: Float) -> Point {
     return Point(x: p.x + dx, y: p.y + dy)
 }
 
-function sizeArea(s: Size) -> Float {
+function sizeArea(s: borrow Size) -> Float {
     return s.width * s.height
 }
 
-function sizeScale(s: Size, factor: Float) -> Size {
+function sizeScale(s: borrow Size, factor: Float) -> Size {
     return Size(width: s.width * factor, height: s.height * factor)
 }
 
-function rectRight(r: Rect) -> Float {
+function rectRight(r: borrow Rect) -> Float {
     return r.x + r.width
 }
 
-function rectBottom(r: Rect) -> Float {
+function rectBottom(r: borrow Rect) -> Float {
     return r.y + r.height
 }
 
-function rectCenter(r: Rect) -> Point {
+function rectCenter(r: borrow Rect) -> Point {
     return Point(x: r.x + r.width / 2.0, y: r.y + r.height / 2.0)
 }
 
-function rectContains(r: Rect, point: Point) -> Bool {
+function rectContains(r: borrow Rect, point: borrow Point) -> Bool {
     return point.x >= r.x && point.x <= rectRight(r: r) && point.y >= r.y && point.y <= rectBottom(r: r)
 }
 
-function rectIntersects(r: Rect, other: Rect) -> Bool {
+function rectIntersects(r: borrow Rect, other: borrow Rect) -> Bool {
     return r.x < rectRight(r: other) && rectRight(r: r) > other.x && r.y < rectBottom(r: other) && rectBottom(r: r) > other.y
 }
 
-function rectInset(r: Rect, by: EdgeInsets) -> Rect {
+function rectInset(r: borrow Rect, by: borrow EdgeInsets) -> Rect {
     let insetWidth = (r.width - by.leading) - by.trailing
     let insetHeight = (r.height - by.top) - by.bottom
     return Rect(x: r.x + by.leading, y: r.y + by.top, width: insetWidth, height: insetHeight)
 }
 
-function edgeInsetsHorizontalTotal(insets: EdgeInsets) -> Float {
+function edgeInsetsHorizontalTotal(insets: borrow EdgeInsets) -> Float {
     return insets.leading + insets.trailing
 }
 
-function edgeInsetsVerticalTotal(insets: EdgeInsets) -> Float {
+function edgeInsetsVerticalTotal(insets: borrow EdgeInsets) -> Float {
     return insets.top + insets.bottom
 }
 
-function edgeInsetsTotal(insets: EdgeInsets) -> Float {
+function edgeInsetsTotal(insets: borrow EdgeInsets) -> Float {
     return edgeInsetsHorizontalTotal(insets: insets) + edgeInsetsVerticalTotal(insets: insets)
 }

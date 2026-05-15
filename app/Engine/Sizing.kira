@@ -19,15 +19,15 @@ function repeatedSpacing(count: Int, spacing: Float) -> Float {
     return intAsFloat(value: count - 1) * spacing
 }
 
-function outerWidth(node: LayoutNode) -> Float {
+function outerWidth(node: borrow LayoutNode) -> Float {
     return node.measuredSize.width + edgeInsetsHorizontalTotal(insets: node.descriptor.margin)
 }
 
-function outerHeight(node: LayoutNode) -> Float {
+function outerHeight(node: borrow LayoutNode) -> Float {
     return node.measuredSize.height + edgeInsetsVerticalTotal(insets: node.descriptor.margin)
 }
 
-function childAvailableSize(parentAvailable: Size, parent: LayoutDescriptor, child: LayoutNode, childCount: Int) -> Size {
+function childAvailableSize(parentAvailable: borrow Size, parent: borrow LayoutDescriptor, child: borrow LayoutNode, childCount: Int) -> Size {
     let margin = child.descriptor.margin
     var width = parentAvailable.width
     var height = parentAvailable.height

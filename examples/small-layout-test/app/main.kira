@@ -91,8 +91,8 @@ function demoLayoutEngine() {
     var tree = LayoutTree(nodes: [root, card, filler, overlay, badge])
 
     let engine = LayoutEngine()
-    tree = engine.measure(tree: tree, index: 0, available: Size(width: 240.0, height: 160.0))
-    tree = engine.place(tree: tree, index: 0, origin: Point(x: 5.0, y: 7.0))
+    engine.measure(tree: tree, index: 0, available: Size(width: 240.0, height: 160.0))
+    engine.place(tree: tree, index: 0, origin: Point(x: 5.0, y: 7.0))
     let measuredRoot = tree.nodes[0]
     let measured = measuredRoot.measuredSize
 
