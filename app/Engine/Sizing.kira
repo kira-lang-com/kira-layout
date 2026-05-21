@@ -27,25 +27,52 @@ function outerHeight(node: borrow LayoutNode) -> Float {
     return node.measuredSize.height + edgeInsetsVerticalTotal(insets: node.descriptor.margin)
 }
 
+function constrainedChildAxisOffer(parentAvailable: Float, sizeMode: SizeMode) -> Float {
+    match sizeMode {
+        Fixed(value) -> return nonNegative(value: value);
+        Fill -> return nonNegative(value: parentAvailable);
+        Fraction(of) -> return nonNegative(value: parentAvailable * of);
+        Min(value) -> return parentAvailable > value ? parentAvailable : value;
+        Max(value) -> return parentAvailable < value ? parentAvailable : value;
+        Hug -> return parentAvailable;
+    }
+}
+
 function childAvailableSize(parentAvailable: borrow Size, parent: borrow LayoutDescriptor, child: borrow LayoutNode, childCount: Int) -> Size {
     let margin = child.descriptor.margin
     var width = parentAvailable.width
     var height = parentAvailable.height
 
-    if parent.arrange == ArrangeMode.Stack {
+    match parent.arrange {
+        Stack -> {
         let totalSpacing = repeatedSpacing(count: childCount, spacing: parent.spacing)
-        if parent.axis == Axis.Horizontal {
-            width = width - totalSpacing
-        } else {
-            height = height - totalSpacing
+            match parent.axis {
+                Horizontal -> width = width - totalSpacing;
+                Vertical -> height = height - totalSpacing;
+            }
         }
+        Absolute -> {}
+        Grid -> {}
+        Wrap -> {}
+        Overlay -> {}
+        Fill -> {}
     }
 
-    if parent.arrange == ArrangeMode.Grid {
-        if parent.columns > 0 {
-            let totalSpacing = repeatedSpacing(count: parent.columns, spacing: parent.spacing)
-            width = (width - totalSpacing) / intAsFloat(value: parent.columns)
+    match parent.arrange {
+        Grid -> {
+            if parent.columns > 0 {
+                let totalSpacing = repeatedSpacing(count: parent.columns, spacing: parent.spacing)
+                width = (width - totalSpacing) / intAsFloat(value: parent.columns)
+            }
         }
+        Stack -> {}
+        Absolute -> {}
+        Wrap -> {}
+        Overlay -> {
+            width = constrainedChildAxisOffer(parentAvailable.width, parent.width)
+            height = constrainedChildAxisOffer(parentAvailable.height, parent.height)
+        }
+        Fill -> {}
     }
 
     return Size(

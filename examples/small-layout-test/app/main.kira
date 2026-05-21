@@ -50,6 +50,52 @@ function stackDescriptor() -> LayoutDescriptor {
     )
 }
 
+function horizontalSplitDescriptor() -> LayoutDescriptor {
+    return LayoutDescriptor(
+        width: SizeMode.Fixed(1280.0),
+        height: SizeMode.Fixed(720.0),
+        arrange: ArrangeMode.Stack,
+        axis: Axis.Horizontal,
+        spacing: 40.0,
+        rowSpacing: 0.0,
+        alignment: CrossAlignment.Stretch,
+        overlayAlignment: Alignment.Center,
+        columns: 1,
+        padding: EdgeInsets(top: 40.0, trailing: 40.0, bottom: 40.0, leading: 40.0),
+        margin: emptyInsets(),
+        x: 0.0,
+        y: 0.0,
+        zIndex: 0,
+        clipContent: false
+    )
+}
+
+function fillLeaf(padding: EdgeInsets) -> LayoutNode {
+    return LayoutNode(
+        descriptor: LayoutDescriptor(
+            width: SizeMode.Fill,
+            height: SizeMode.Fill,
+            arrange: ArrangeMode.Fill,
+            axis: Axis.Vertical,
+            spacing: 0.0,
+            rowSpacing: 0.0,
+            alignment: CrossAlignment.Stretch,
+            overlayAlignment: Alignment.Center,
+            columns: 1,
+            padding: padding,
+            margin: emptyInsets(),
+            x: 0.0,
+            y: 0.0,
+            zIndex: 0,
+            clipContent: false
+        ),
+        measuredSize: Size(width: 0.0, height: 0.0),
+        placedOrigin: Point(x: 0.0, y: 0.0),
+        firstChild: 0,
+        childCount: 0
+    )
+}
+
 function overlayDescriptor() -> LayoutDescriptor {
     return LayoutDescriptor(
         width: SizeMode.Fixed(100.0),
@@ -68,6 +114,126 @@ function overlayDescriptor() -> LayoutDescriptor {
         zIndex: 0,
         clipContent: false
     )
+}
+
+function demoHorizontalSplit() {
+    let sidebar = LayoutNode(
+        descriptor: LayoutDescriptor(
+            width: SizeMode.Fixed(250.0),
+            height: SizeMode.Fill,
+            arrange: ArrangeMode.Fill,
+            axis: Axis.Vertical,
+            spacing: 0.0,
+            rowSpacing: 0.0,
+            alignment: CrossAlignment.Stretch,
+            overlayAlignment: Alignment.Center,
+            columns: 1,
+            padding: EdgeInsets(top: 32.0, trailing: 24.0, bottom: 32.0, leading: 24.0),
+            margin: emptyInsets(),
+            x: 0.0,
+            y: 0.0,
+            zIndex: 0,
+            clipContent: true
+        ),
+        measuredSize: Size(width: 0.0, height: 0.0),
+        placedOrigin: Point(x: 0.0, y: 0.0),
+        firstChild: 0,
+        childCount: 0
+    )
+    let content = fillLeaf(padding: emptyInsets())
+    let root = LayoutNode(
+        descriptor: horizontalSplitDescriptor(),
+        measuredSize: Size(width: 0.0, height: 0.0),
+        placedOrigin: Point(x: 0.0, y: 0.0),
+        firstChild: 1,
+        childCount: 2
+    )
+    var tree = LayoutTree(nodes: [root, sidebar, content])
+
+    let engine = LayoutEngine()
+    engine.measure(tree: tree, index: 0, available: Size(width: 1280.0, height: 720.0))
+    engine.place(tree: tree, index: 0, origin: Point(x: 0.0, y: 0.0))
+
+    let sidebarFrame = layoutFrame(tree, 1)
+    let contentFrame = layoutFrame(tree, 2)
+    print("[ HORIZONTAL SPLIT ]")
+    print("-------------------------------------")
+    if sidebarFrame.x == 40.0 && sidebarFrame.y == 40.0 && sidebarFrame.width == 250.0 && sidebarFrame.height == 640.0 && contentFrame.x == 330.0 && contentFrame.y == 40.0 && contentFrame.width == 910.0 && contentFrame.height == 640.0 {
+        print("  Horizontal split: ok")
+    } else {
+        print("  Horizontal split: unexpected")
+    }
+    print("")
+}
+
+function demoHorizontalFixedFixed() {
+    let left = LayoutNode(
+        descriptor: LayoutDescriptor(
+            width: SizeMode.Fixed(250.0),
+            height: SizeMode.Fill,
+            arrange: ArrangeMode.Fill,
+            axis: Axis.Vertical,
+            spacing: 0.0,
+            rowSpacing: 0.0,
+            alignment: CrossAlignment.Stretch,
+            overlayAlignment: Alignment.Center,
+            columns: 1,
+            padding: emptyInsets(),
+            margin: emptyInsets(),
+            x: 0.0,
+            y: 0.0,
+            zIndex: 0,
+            clipContent: false
+        ),
+        measuredSize: Size(width: 0.0, height: 0.0),
+        placedOrigin: Point(x: 0.0, y: 0.0),
+        firstChild: 0,
+        childCount: 0
+    )
+    let right = LayoutNode(
+        descriptor: LayoutDescriptor(
+            width: SizeMode.Fixed(400.0),
+            height: SizeMode.Fill,
+            arrange: ArrangeMode.Fill,
+            axis: Axis.Vertical,
+            spacing: 0.0,
+            rowSpacing: 0.0,
+            alignment: CrossAlignment.Stretch,
+            overlayAlignment: Alignment.Center,
+            columns: 1,
+            padding: emptyInsets(),
+            margin: emptyInsets(),
+            x: 0.0,
+            y: 0.0,
+            zIndex: 0,
+            clipContent: false
+        ),
+        measuredSize: Size(width: 0.0, height: 0.0),
+        placedOrigin: Point(x: 0.0, y: 0.0),
+        firstChild: 0,
+        childCount: 0
+    )
+    let root = LayoutNode(
+        descriptor: horizontalSplitDescriptor(),
+        measuredSize: Size(width: 0.0, height: 0.0),
+        placedOrigin: Point(x: 0.0, y: 0.0),
+        firstChild: 1,
+        childCount: 2
+    )
+    var tree = LayoutTree(nodes: [root, left, right])
+    let engine = LayoutEngine()
+    engine.measure(tree: tree, index: 0, available: Size(width: 1280.0, height: 720.0))
+    engine.place(tree: tree, index: 0, origin: Point(x: 0.0, y: 0.0))
+    let leftFrame = layoutFrame(tree, 1)
+    let rightFrame = layoutFrame(tree, 2)
+    print("[ HORIZONTAL FIXED FIXED ]")
+    print("-------------------------------------")
+    if leftFrame.x == 40.0 && leftFrame.width == 250.0 && rightFrame.x == 330.0 && rightFrame.width == 400.0 {
+        print("  Horizontal fixed/fixed: ok")
+    } else {
+        print("  Horizontal fixed/fixed: unexpected")
+    }
+    print("")
 }
 
 function demoLayoutEngine() {
@@ -137,6 +303,8 @@ function main() {
 
     demoGeometry()
     demoLayoutEngine()
+    demoHorizontalSplit()
+    demoHorizontalFixedFixed()
 
     print("=====================================")
     print("  All demos completed successfully!")

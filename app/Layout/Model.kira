@@ -2,6 +2,7 @@
 struct LayoutDescriptor {
     var width: SizeMode
     var height: SizeMode
+    var flex: Int = 0
     var arrange: ArrangeMode
     var axis: Axis
     var spacing: Float = 0.0

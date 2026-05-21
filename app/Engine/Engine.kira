@@ -1,5 +1,32 @@
 /// Two-pass layout algorithm over a flat tree.
 struct LayoutEngine {
+    function axisCode(axis: Axis) -> Int {
+        match axis {
+            Horizontal -> return 1;
+            Vertical -> return 2;
+        }
+    }
+
+    function arrangeCode(arrange: ArrangeMode) -> Int {
+        match arrange {
+            Stack -> return 1;
+            Absolute -> return 2;
+            Grid -> return 3;
+            Wrap -> return 4;
+            Overlay -> return 5;
+            Fill -> return 6;
+        }
+    }
+
+    function isStretchAlignment(alignment: CrossAlignment) -> Bool {
+        match alignment {
+            Stretch -> return true;
+            Start -> return false;
+            Center -> return false;
+            End -> return false;
+        }
+    }
+
     function resolveSizeMode(sizeMode: SizeMode, available: Float, content: Float) -> Float {
         match sizeMode {
             Fixed(value) -> return nonNegative(value: value);
@@ -59,23 +86,24 @@ struct LayoutEngine {
             width: resolvedWidth,
             height: resolvedHeight
         )
-        result.nodes[index] = layoutNodeWithSize(node: result.nodes[index], size: finalSize)
+        result.nodes[index].measuredSize = finalSize
         return
     }
 
     function computeContentSize(tree: borrow LayoutTree, index: Int, available: borrow Size) -> Size {
         let node = tree.nodes[index]
         let desc = node.descriptor
-        if desc.arrange == ArrangeMode.Stack {
+        let arrange = arrangeCode(desc.arrange)
+        if arrange == 1 {
             return computeStackContentSize(tree: tree, index: index)
         }
-        if desc.arrange == ArrangeMode.Absolute {
+        if arrange == 2 {
             return computeAbsoluteContentSize(tree: tree, index: index)
         }
-        if desc.arrange == ArrangeMode.Grid {
+        if arrange == 3 {
             return computeGridContentSize(tree: tree, index: index)
         }
-        if desc.arrange == ArrangeMode.Wrap {
+        if arrange == 4 {
             return computeWrapContentSize(tree: tree, index: index, available: available)
         }
         return computeOverlayContentSize(tree: tree, index: index)
@@ -91,7 +119,7 @@ struct LayoutEngine {
             let child = tree.nodes[node.firstChild + i]
             let childWidth = outerWidth(node: child)
             let childHeight = outerHeight(node: child)
-            if desc.axis == Axis.Horizontal {
+            if axisCode(desc.axis) == 1 {
                 width = width + childWidth
                 height = height > childHeight ? height : childHeight
             } else {
@@ -101,7 +129,7 @@ struct LayoutEngine {
             i = i + 1
         }
         if node.childCount > 1 {
-            if desc.axis == Axis.Horizontal {
+            if axisCode(desc.axis) == 1 {
                 width = width + repeatedSpacing(count: node.childCount, spacing: desc.spacing)
             } else {
                 height = height + repeatedSpacing(count: node.childCount, spacing: desc.spacing)
@@ -207,7 +235,7 @@ struct LayoutEngine {
 
     function place(tree: borrow mut LayoutTree, index: Int, origin: borrow Point) {
         var result = tree
-        result.nodes[index] = layoutNodeWithOrigin(node: result.nodes[index], origin: origin)
+        result.nodes[index].placedOrigin = origin
         let node = result.nodes[index]
         let desc = node.descriptor
         let innerOrigin = Point(x: origin.x + desc.padding.leading, y: origin.y + desc.padding.top)
@@ -215,19 +243,20 @@ struct LayoutEngine {
             width: nonNegative(value: node.measuredSize.width - edgeInsetsHorizontalTotal(insets: desc.padding)),
             height: nonNegative(value: node.measuredSize.height - edgeInsetsVerticalTotal(insets: desc.padding))
         )
-        if desc.arrange == ArrangeMode.Stack {
+        let arrange = arrangeCode(desc.arrange)
+        if arrange == 1 {
             placeStack(tree: result, index: index, origin: innerOrigin, available: innerSize)
             return
-        } else if desc.arrange == ArrangeMode.Absolute {
+        } else if arrange == 2 {
             placeAbsolute(tree: result, index: index, origin: innerOrigin)
             return
-        } else if desc.arrange == ArrangeMode.Grid {
+        } else if arrange == 3 {
             placeGrid(tree: result, index: index, origin: innerOrigin, available: innerSize)
             return
-        } else if desc.arrange == ArrangeMode.Wrap {
+        } else if arrange == 4 {
             placeWrap(tree: result, index: index, origin: innerOrigin, available: innerSize)
             return
-        } else if desc.arrange == ArrangeMode.Overlay {
+        } else if arrange == 5 {
             placeOverlay(tree: result, index: index, origin: innerOrigin, available: innerSize)
             return
         }
@@ -242,10 +271,26 @@ struct LayoutEngine {
         var i = 0
         while i < node.childCount {
             let child = tree.nodes[node.firstChild + i]
-            if desc.axis == Axis.Horizontal {
+            if axisCode(desc.axis) == 1 {
                 total = total + (isFill(sizeMode: child.descriptor.width) ? 1 : 0)
             } else {
                 total = total + (isFill(sizeMode: child.descriptor.height) ? 1 : 0)
+            }
+            i = i + 1
+        }
+        return total
+    }
+
+    function stackFlexTotal(tree: borrow LayoutTree, index: Int) -> Int {
+        let node = tree.nodes[index]
+        let desc = node.descriptor
+        var total = 0
+        var i = 0
+        while i < node.childCount {
+            let child = tree.nodes[node.firstChild + i]
+            let wantsFill = axisCode(desc.axis) == 1 ? isFill(sizeMode: child.descriptor.width) : isFill(sizeMode: child.descriptor.height)
+            if wantsFill {
+                total = total + (child.descriptor.flex > 0 ? child.descriptor.flex : 1)
             }
             i = i + 1
         }
@@ -259,7 +304,7 @@ struct LayoutEngine {
         var i = 0
         while i < node.childCount {
             let child = tree.nodes[node.firstChild + i]
-            if desc.axis == Axis.Horizontal {
+            if axisCode(desc.axis) == 1 {
                 total = total + (isFill(sizeMode: child.descriptor.width) ? 0.0 : outerWidth(node: child))
             } else {
                 total = total + (isFill(sizeMode: child.descriptor.height) ? 0.0 : outerHeight(node: child))
@@ -278,34 +323,78 @@ struct LayoutEngine {
         }
     }
 
+    function resolvedStackMainSize(sizeMode: SizeMode, current: Float, fillSize: Float, flex: Int) -> Float {
+        match sizeMode {
+            Fill -> return fillSize * intAsFloat(value: flex);
+            Fixed(value) -> {
+                let ignored = value
+                return current
+            }
+            Hug -> return current;
+            Fraction(value) -> {
+                let ignored = value
+                return current
+            }
+            Min(value) -> {
+                let ignored = value
+                return current
+            }
+            Max(value) -> {
+                let ignored = value
+                return current
+            }
+        }
+    }
+
+    function resolvedStackCrossSize(alignment: CrossAlignment, current: Float, available: Float, marginTotal: Float) -> Float {
+        match alignment {
+            Stretch -> return nonNegative(value: available - marginTotal);
+            Start -> return current;
+            Center -> return current;
+            End -> return current;
+        }
+    }
+
+    function remeasurePlacedChild(tree: borrow mut LayoutTree, childIndex: Int, width: Float, height: Float) {
+        var result = tree
+        let child = result.nodes[childIndex]
+        if child.childCount > 0 && (child.measuredSize.width != width || child.measuredSize.height != height) {
+            measure(tree: result, index: childIndex, available: Size(width: width, height: height))
+        }
+        result.nodes[childIndex].measuredSize = Size(width: width, height: height)
+        return
+    }
+
     function placeStack(tree: borrow mut LayoutTree, index: Int, origin: borrow Point, available: borrow Size) {
         var result = tree
         let node = result.nodes[index]
         let desc = node.descriptor
         let fillCount = stackFillCount(tree: result, index: index)
+        let flexTotal = stackFlexTotal(tree: result, index: index)
         let fixedTotal = stackFixedTotal(tree: result, index: index)
-        let mainAvailable = desc.axis == Axis.Horizontal ? available.width : available.height
+        let mainAvailable = axisCode(desc.axis) == 1 ? available.width : available.height
         let remaining = nonNegative(value: mainAvailable - fixedTotal - repeatedSpacing(count: node.childCount, spacing: desc.spacing))
-        let fillSize = fillCount > 0 ? remaining / intAsFloat(value: fillCount) : 0.0
-        var cursor = desc.axis == Axis.Horizontal ? origin.x : origin.y
+        let fillSize = flexTotal > 0 ? remaining / intAsFloat(value: flexTotal) : (fillCount > 0 ? remaining / intAsFloat(value: fillCount) : 0.0)
+        var cursor = axisCode(desc.axis) == 1 ? origin.x : origin.y
         var i = 0
         while i < node.childCount {
             let childIndex = node.firstChild + i
             let child = result.nodes[childIndex]
             let margin = child.descriptor.margin
+            let flex = child.descriptor.flex > 0 ? child.descriptor.flex : 1
             var width = child.measuredSize.width
             var height = child.measuredSize.height
-            if desc.axis == Axis.Horizontal {
-                width = isFill(sizeMode: child.descriptor.width) ? fillSize : width
-                height = desc.alignment == CrossAlignment.Stretch ? nonNegative(value: available.height - edgeInsetsVerticalTotal(insets: margin)) : height
-                result.nodes[childIndex] = layoutNodeWithSize(node: child, size: Size(width: width, height: height))
+            if axisCode(desc.axis) == 1 {
+                width = resolvedStackMainSize(child.descriptor.width, width, fillSize, flex)
+                height = resolvedStackCrossSize(desc.alignment, height, available.height, edgeInsetsVerticalTotal(insets: margin))
+                remeasurePlacedChild(tree: result, childIndex: childIndex, width: width, height: height)
                 let crossOffset = computeCrossOffset(childSize: outerHeight(node: result.nodes[childIndex]), available: available.height, alignment: desc.alignment)
                 place(tree: result, index: childIndex, origin: Point(x: cursor + margin.leading, y: origin.y + crossOffset + margin.top))
                 cursor = cursor + outerWidth(node: result.nodes[childIndex]) + desc.spacing
             } else {
-                height = isFill(sizeMode: child.descriptor.height) ? fillSize : height
-                width = desc.alignment == CrossAlignment.Stretch ? nonNegative(value: available.width - edgeInsetsHorizontalTotal(insets: margin)) : width
-                result.nodes[childIndex] = layoutNodeWithSize(node: child, size: Size(width: width, height: height))
+                height = resolvedStackMainSize(child.descriptor.height, height, fillSize, flex)
+                width = resolvedStackCrossSize(desc.alignment, width, available.width, edgeInsetsHorizontalTotal(insets: margin))
+                remeasurePlacedChild(tree: result, childIndex: childIndex, width: width, height: height)
                 let crossOffset = computeCrossOffset(childSize: outerWidth(node: result.nodes[childIndex]), available: available.width, alignment: desc.alignment)
                 place(tree: result, index: childIndex, origin: Point(x: origin.x + crossOffset + margin.leading, y: cursor + margin.top))
                 cursor = cursor + outerHeight(node: result.nodes[childIndex]) + desc.spacing
@@ -337,7 +426,7 @@ struct LayoutEngine {
             let child = result.nodes[childIndex]
             let margin = child.descriptor.margin
             let size = Size(width: nonNegative(value: available.width - edgeInsetsHorizontalTotal(insets: margin)), height: nonNegative(value: available.height - edgeInsetsVerticalTotal(insets: margin)))
-            result.nodes[childIndex] = layoutNodeWithSize(node: child, size: size)
+            remeasurePlacedChild(tree: result, childIndex: childIndex, width: size.width, height: size.height)
             place(tree: result, index: childIndex, origin: Point(x: origin.x + margin.leading, y: origin.y + margin.top))
         }
         return
@@ -380,7 +469,7 @@ struct LayoutEngine {
             let child = result.nodes[childIndex]
             let margin = child.descriptor.margin
             let width = isFill(sizeMode: child.descriptor.width) ? nonNegative(value: cellWidth - edgeInsetsHorizontalTotal(insets: margin)) : child.measuredSize.width
-            result.nodes[childIndex] = layoutNodeWithSize(node: child, size: Size(width: width, height: child.measuredSize.height))
+            remeasurePlacedChild(tree: result, childIndex: childIndex, width: width, height: child.measuredSize.height)
             place(tree: result, index: childIndex, origin: Point(x: origin.x + intAsFloat(value: column) * (cellWidth + desc.spacing) + margin.leading, y: rowY + margin.top))
             rowHeight = rowHeight > outerHeight(node: result.nodes[childIndex]) ? rowHeight : outerHeight(node: result.nodes[childIndex])
             i = i + 1
@@ -417,8 +506,46 @@ struct LayoutEngine {
     }
 
     function alignedOrigin(child: borrow Size, container: borrow Size, origin: borrow Point, alignment: Alignment) -> Point {
-        let dx = alignment == Alignment.TopLeading || alignment == Alignment.Leading || alignment == Alignment.BottomLeading ? 0.0 : (alignment == Alignment.Top || alignment == Alignment.Center || alignment == Alignment.Bottom ? (container.width - child.width) / 2.0 : container.width - child.width)
-        let dy = alignment == Alignment.TopLeading || alignment == Alignment.Top || alignment == Alignment.TopTrailing ? 0.0 : (alignment == Alignment.Leading || alignment == Alignment.Center || alignment == Alignment.Trailing ? (container.height - child.height) / 2.0 : container.height - child.height)
+        var dx = 0.0
+        var dy = 0.0
+        match alignment {
+            TopLeading -> {
+                dx = 0.0
+                dy = 0.0
+            }
+            Top -> {
+                dx = (container.width - child.width) / 2.0
+                dy = 0.0
+            }
+            TopTrailing -> {
+                dx = container.width - child.width
+                dy = 0.0
+            }
+            Leading -> {
+                dx = 0.0
+                dy = (container.height - child.height) / 2.0
+            }
+            Center -> {
+                dx = (container.width - child.width) / 2.0
+                dy = (container.height - child.height) / 2.0
+            }
+            Trailing -> {
+                dx = container.width - child.width
+                dy = (container.height - child.height) / 2.0
+            }
+            BottomLeading -> {
+                dx = 0.0
+                dy = container.height - child.height
+            }
+            Bottom -> {
+                dx = (container.width - child.width) / 2.0
+                dy = container.height - child.height
+            }
+            BottomTrailing -> {
+                dx = container.width - child.width
+                dy = container.height - child.height
+            }
+        }
         return Point(x: origin.x + dx, y: origin.y + dy)
     }
 }
