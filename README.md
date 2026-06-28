@@ -89,7 +89,7 @@ struct LayoutEngine {
 - `SizeMode.Hug`, `Min`, and `Max` include content plus padding.
 - Stack, Absolute, Grid, Wrap, Overlay, and Fill are implemented in both measure and place.
 - The tree is flat (`LayoutTree.nodes` plus `firstChild` / `childCount`) because current executable Kira does not accept empty array literals for leaf child lists.
-- Integer-to-float layout math uses an explicit helper because `Float(...)` casts are not currently available in this compiler.
+- Integer-to-float layout math goes through the `intAsFloat` helper, now a single `Float(...)` numeric cast (the compiler gained `Int(...)`/`Float(...)` casts).
 
 ## License
 

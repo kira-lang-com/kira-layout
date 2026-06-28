@@ -293,6 +293,92 @@ function demoGeometry() {
     print("")
 }
 
+function fixedStackLeaf(w: Float, h: Float, firstChild: Int, childCount: Int) -> LayoutNode {
+    return LayoutNode(
+        descriptor: LayoutDescriptor(
+            width: SizeMode.Fixed(w),
+            height: SizeMode.Fixed(h),
+            arrange: ArrangeMode.Stack,
+            axis: Axis.Vertical,
+            spacing: 0.0,
+            rowSpacing: 0.0,
+            alignment: CrossAlignment.Start,
+            overlayAlignment: Alignment.Center,
+            columns: 1,
+            padding: emptyInsets(),
+            margin: emptyInsets(),
+            x: 0.0,
+            y: 0.0,
+            zIndex: 0,
+            clipContent: false
+        ),
+        measuredSize: Size(width: 0.0, height: 0.0),
+        placedOrigin: Point(x: 0.0, y: 0.0),
+        firstChild: firstChild,
+        childCount: childCount
+    )
+}
+
+function retainedDemoTree() -> LayoutTree {
+    return LayoutTree(nodes: [
+        fixedStackLeaf(w: 200.0, h: 200.0, firstChild: 1, childCount: 2),
+        fixedStackLeaf(w: 60.0, h: 40.0, firstChild: 3, childCount: 1),
+        fixedStackLeaf(w: 60.0, h: 40.0, firstChild: 4, childCount: 1),
+        fixedStackLeaf(w: 30.0, h: 20.0, firstChild: 0, childCount: 0),
+        fixedStackLeaf(w: 30.0, h: 20.0, firstChild: 0, childCount: 0)
+    ])
+}
+
+// Demonstrates the retained layout cache: an unchanged second pass does no
+// measurement/placement work, and a single changed leaf recomputes only its
+// ancestor chain while its sibling subtree is reused -- all while producing
+// pixel-identical frames.
+function demoRetainedLayout() {
+    let engine = LayoutEngine()
+    let available = Size(width: 200.0, height: 200.0)
+
+    var tree = retainedDemoTree()
+    engine.measure(tree: tree, index: 0, available: available)
+    engine.place(tree: tree, index: 0, origin: Point(x: 0.0, y: 0.0))
+
+    let childBPass1 = layoutFrame(tree, 2)
+    let grandBPass1 = layoutFrame(tree, 4)
+
+    print("[ RETAINED LAYOUT ]")
+    print("-------------------------------------")
+
+    // Pass 2: nothing changed. Mark the whole tree clean and re-run.
+    tree = layoutPropagateDirty(move tree, [false, false, false, false, false])
+    tree = layoutResetCounters(move tree)
+    engine.measure(tree: tree, index: 0, available: available)
+    engine.place(tree: tree, index: 0, origin: Point(x: 0.0, y: 0.0))
+    if tree.measureComputes == 0 && tree.placeComputes == 0 && tree.measureSkips > 0 && tree.placeSkips > 0 {
+        print("  Unchanged pass: no recompute (ok)")
+    } else {
+        print("  Unchanged pass: unexpected recompute")
+    }
+
+    // Pass 3: change grandchild A only. Its frame must update; sibling subtree
+    // B must be reused and stay pixel-identical.
+    tree.nodes[3] = fixedStackLeaf(w: 40.0, h: 20.0, firstChild: 0, childCount: 0)
+    tree = layoutPropagateDirty(move tree, [false, false, false, true, false])
+    tree = layoutResetCounters(move tree)
+    engine.measure(tree: tree, index: 0, available: available)
+    engine.place(tree: tree, index: 0, origin: Point(x: 0.0, y: 0.0))
+
+    let grandAPass3 = layoutFrame(tree, 3)
+    let childBPass3 = layoutFrame(tree, 2)
+    let grandBPass3 = layoutFrame(tree, 4)
+
+    let siblingReused = childBPass3.x == childBPass1.x && childBPass3.y == childBPass1.y && childBPass3.width == childBPass1.width && childBPass3.height == childBPass1.height && grandBPass3.x == grandBPass1.x && grandBPass3.y == grandBPass1.y && grandBPass3.width == grandBPass1.width
+    if grandAPass3.width == 40.0 && siblingReused && tree.measureSkips > 0 && tree.placeSkips > 0 {
+        print("  Targeted change: only affected subtree recomputed (ok)")
+    } else {
+        print("  Targeted change: unexpected")
+    }
+    print("")
+}
+
 @Main
 function main() {
     print("")
@@ -305,6 +391,7 @@ function main() {
     demoLayoutEngine()
     demoHorizontalSplit()
     demoHorizontalFixedFixed()
+    demoRetainedLayout()
 
     print("=====================================")
     print("  All demos completed successfully!")

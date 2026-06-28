@@ -24,10 +24,230 @@ struct LayoutNode {
     var placedOrigin: Point
     var firstChild: Int = 0
     var childCount: Int = 0
+
+    // --- Retained layout cache ---------------------------------------------
+    // `subtreeDirty` is owned by the layout pass: it is true when this node or
+    // any descendant changed since the cached layout was produced. The engine
+    // only reads it. When a node is clean and is offered the same constraints
+    // it was last measured/placed against, the engine reuses the cached
+    // `measuredSize` / `placedOrigin` for the whole subtree instead of
+    // recursing. A freshly built node defaults to dirty so a first pass always
+    // computes real geometry.
+    var subtreeDirty: Bool = true
+    // Top-down measure pass: the available size this node was last measured
+    // against. The top-down measure of a node is skipped only when the node is
+    // clean, the offer is unchanged, and the node was not resized to a different
+    // size during the previous placement (`placeResized` false -- a rigid node).
+    // For such nodes a skip is exact: recomputing would produce the same size,
+    // and the already-correct subtree geometry is preserved. Flexible nodes
+    // (resized at place time) keep `placeResized` set and recompute as before.
+    var measureCacheValid: Bool = false
+    var measureOfferW: Float = 0.0
+    var measureOfferH: Float = 0.0
+    var placeResized: Bool = false
+    // Placement pass: the origin and measured size this subtree was last placed
+    // with. If both are unchanged and the subtree is clean, every descendant
+    // origin is still valid and placement is skipped -- exact regardless of
+    // whether the node is rigid or flexible, because it is checked against the
+    // final resolved size at place time.
+    var placeCacheValid: Bool = false
+    var placeOriginX: Float = 0.0
+    var placeOriginY: Float = 0.0
+    var placeMeasuredW: Float = 0.0
+    var placeMeasuredH: Float = 0.0
 }
 
 struct LayoutTree {
     var nodes: [LayoutNode]
+    // Instrumentation: how many subtree roots the most recent measure/place
+    // pass actually recomputed versus reused from cache. Reset at the start of
+    // each pass. Lets callers and tests prove recomputation reduction.
+    var measureComputes: Int = 0
+    var measureSkips: Int = 0
+    var placeComputes: Int = 0
+    var placeSkips: Int = 0
+}
+
+/// Reset the per-pass instrumentation counters. Call once before a
+/// measure+place pass so `measureSkips` / `placeSkips` reflect that pass alone.
+function layoutResetCounters(tree: LayoutTree) -> LayoutTree {
+    var t = tree
+    t.measureComputes = 0
+    t.measureSkips = 0
+    t.placeComputes = 0
+    t.placeSkips = 0
+    return t
+}
+
+/// Compute parent indices for a flat layout tree. Root and detached nodes map
+/// to -1. The flat layout always appends descendants after their parent, so a
+/// single forward scan suffices.
+function layoutParentIndices(tree: borrow LayoutTree) -> [Int] {
+    var parents: [Int] = []
+    var i = 0
+    while i < tree.nodes.count {
+        parents.append(-1)
+        i = i + 1
+    }
+    i = 0
+    while i < tree.nodes.count {
+        let node = tree.nodes[i]
+        var c = 0
+        while c < node.childCount {
+            parents[node.firstChild + c] = i
+            c = c + 1
+        }
+        i = i + 1
+    }
+    return parents
+}
+
+/// Set `subtreeDirty` precisely from a per-node "this node's own descriptor
+/// changed" flag: every changed node and all of its ancestors become dirty,
+/// everything else is marked clean. This is the precise invalidation that lets
+/// the engine skip untouched subtrees -- a change dirties only the path from the
+/// changed node to the root, leaving sibling subtrees reusable.
+function layoutPropagateDirty(tree: LayoutTree, selfChanged: borrow [Bool]) -> LayoutTree {
+    var t = tree
+    let parents = layoutParentIndices(t)
+    var i = 0
+    while i < t.nodes.count {
+        t.nodes[i].subtreeDirty = false
+        i = i + 1
+    }
+    i = 0
+    while i < t.nodes.count {
+        if i < selfChanged.count && selfChanged[i] {
+            var cur = i
+            while cur != -1 && !t.nodes[cur].subtreeDirty {
+                t.nodes[cur].subtreeDirty = true
+                cur = parents[cur]
+            }
+        }
+        i = i + 1
+    }
+    return t
+}
+
+/// Mark the entire tree dirty (forces a full recompute on the next pass).
+function layoutMarkAllDirty(tree: LayoutTree) -> LayoutTree {
+    var t = tree
+    var i = 0
+    while i < t.nodes.count {
+        t.nodes[i].subtreeDirty = true
+        i = i + 1
+    }
+    return t
+}
+
+/// True when two flat trees have identical structure (node count and each
+/// node's child span). When structure matches, the cached tree can be reused
+/// with patched descriptors; otherwise a full rebuild is required.
+function layoutStructureMatches(a: borrow LayoutTree, b: borrow LayoutTree) -> Bool {
+    if a.nodes.count != b.nodes.count {
+        return false
+    }
+    var i = 0
+    while i < a.nodes.count {
+        if a.nodes[i].firstChild != b.nodes[i].firstChild || a.nodes[i].childCount != b.nodes[i].childCount {
+            return false
+        }
+        i = i + 1
+    }
+    return true
+}
+
+function sizeModeEqual(a: SizeMode, b: SizeMode) -> Bool {
+    match a {
+        Fixed(av) -> {
+            match b {
+                Fixed(bv) -> return av == bv;
+                Fill -> return false;
+                Hug -> return false;
+                Fraction(bv) -> return false;
+                Min(bv) -> return false;
+                Max(bv) -> return false;
+            }
+        }
+        Fill -> {
+            match b {
+                Fill -> return true;
+                Fixed(bv) -> return false;
+                Hug -> return false;
+                Fraction(bv) -> return false;
+                Min(bv) -> return false;
+                Max(bv) -> return false;
+            }
+        }
+        Hug -> {
+            match b {
+                Hug -> return true;
+                Fixed(bv) -> return false;
+                Fill -> return false;
+                Fraction(bv) -> return false;
+                Min(bv) -> return false;
+                Max(bv) -> return false;
+            }
+        }
+        Fraction(av) -> {
+            match b {
+                Fraction(bv) -> return av == bv;
+                Fixed(bv) -> return false;
+                Fill -> return false;
+                Hug -> return false;
+                Min(bv) -> return false;
+                Max(bv) -> return false;
+            }
+        }
+        Min(av) -> {
+            match b {
+                Min(bv) -> return av == bv;
+                Fixed(bv) -> return false;
+                Fill -> return false;
+                Hug -> return false;
+                Fraction(bv) -> return false;
+                Max(bv) -> return false;
+            }
+        }
+        Max(av) -> {
+            match b {
+                Max(bv) -> return av == bv;
+                Fixed(bv) -> return false;
+                Fill -> return false;
+                Hug -> return false;
+                Fraction(bv) -> return false;
+                Min(bv) -> return false;
+            }
+        }
+    }
+}
+
+function edgeInsetsEqual(a: borrow EdgeInsets, b: borrow EdgeInsets) -> Bool {
+    return a.top == b.top && a.trailing == b.trailing && a.bottom == b.bottom && a.leading == b.leading
+}
+
+/// True when two descriptors produce identical layout. Used by the retained
+/// layout pass to decide whether a node's own contribution changed between
+/// frames. Enum-coded fields (arrange/axis/alignment/overlayAlignment) compare
+/// by value; float/int fields compare exactly because they are recomputed from
+/// the same inputs each frame and are bit-stable when unchanged.
+function layoutDescriptorEqual(a: borrow LayoutDescriptor, b: borrow LayoutDescriptor) -> Bool {
+    return sizeModeEqual(a.width, b.width) &&
+        sizeModeEqual(a.height, b.height) &&
+        a.flex == b.flex &&
+        a.arrange == b.arrange &&
+        a.axis == b.axis &&
+        a.spacing == b.spacing &&
+        a.rowSpacing == b.rowSpacing &&
+        a.alignment == b.alignment &&
+        a.overlayAlignment == b.overlayAlignment &&
+        a.columns == b.columns &&
+        edgeInsetsEqual(a.padding, b.padding) &&
+        edgeInsetsEqual(a.margin, b.margin) &&
+        a.x == b.x &&
+        a.y == b.y &&
+        a.zIndex == b.zIndex &&
+        a.clipContent == b.clipContent
 }
 
 function layoutFrame(tree: borrow LayoutTree, index: Int) -> Rect {

@@ -63,6 +63,16 @@ struct LayoutEngine {
     function measure(tree: borrow mut LayoutTree, index: Int, available: borrow Size) {
         var result = tree
         let node = result.nodes[index]
+        // Retained skip: a clean, offer-stable, rigid subtree keeps its cached
+        // sizes. `placeResized` being false means no parent forced this node to
+        // a size different from its intrinsic measure, so its measuredSize is
+        // exactly what a recompute would produce and the subtree below it is
+        // already correct.
+        if !node.subtreeDirty && node.measureCacheValid && !node.placeResized && node.measureOfferW == available.width && node.measureOfferH == available.height {
+            result.measureSkips = result.measureSkips + 1
+            return
+        }
+        result.measureComputes = result.measureComputes + 1
         let desc = node.descriptor
         let innerAvailable = Size(
             width: nonNegative(value: available.width - edgeInsetsHorizontalTotal(insets: desc.padding)),
@@ -87,6 +97,9 @@ struct LayoutEngine {
             height: resolvedHeight
         )
         result.nodes[index].measuredSize = finalSize
+        result.nodes[index].measureCacheValid = true
+        result.nodes[index].measureOfferW = available.width
+        result.nodes[index].measureOfferH = available.height
         return
     }
 
@@ -235,8 +248,17 @@ struct LayoutEngine {
 
     function place(tree: borrow mut LayoutTree, index: Int, origin: borrow Point) {
         var result = tree
-        result.nodes[index].placedOrigin = origin
         let node = result.nodes[index]
+        // Retained skip: a clean subtree placed at the same origin with the same
+        // measured size produces identical descendant origins, so the whole
+        // placement recursion is unnecessary. Exact regardless of node kind,
+        // because the resolved size is what is compared.
+        if !node.subtreeDirty && node.placeCacheValid && node.placeOriginX == origin.x && node.placeOriginY == origin.y && node.placeMeasuredW == node.measuredSize.width && node.placeMeasuredH == node.measuredSize.height {
+            result.placeSkips = result.placeSkips + 1
+            return
+        }
+        result.placeComputes = result.placeComputes + 1
+        result.nodes[index].placedOrigin = origin
         let desc = node.descriptor
         let innerOrigin = Point(x: origin.x + desc.padding.leading, y: origin.y + desc.padding.top)
         let innerSize = Size(
@@ -246,21 +268,22 @@ struct LayoutEngine {
         let arrange = arrangeCode(desc.arrange)
         if arrange == 1 {
             placeStack(tree: result, index: index, origin: innerOrigin, available: innerSize)
-            return
         } else if arrange == 2 {
             placeAbsolute(tree: result, index: index, origin: innerOrigin)
-            return
         } else if arrange == 3 {
             placeGrid(tree: result, index: index, origin: innerOrigin, available: innerSize)
-            return
         } else if arrange == 4 {
             placeWrap(tree: result, index: index, origin: innerOrigin, available: innerSize)
-            return
         } else if arrange == 5 {
             placeOverlay(tree: result, index: index, origin: innerOrigin, available: innerSize)
-            return
+        } else {
+            placeFill(tree: result, index: index, origin: innerOrigin, available: innerSize)
         }
-        placeFill(tree: result, index: index, origin: innerOrigin, available: innerSize)
+        result.nodes[index].placeCacheValid = true
+        result.nodes[index].placeOriginX = origin.x
+        result.nodes[index].placeOriginY = origin.y
+        result.nodes[index].placeMeasuredW = result.nodes[index].measuredSize.width
+        result.nodes[index].placeMeasuredH = result.nodes[index].measuredSize.height
         return
     }
 
@@ -358,10 +381,20 @@ struct LayoutEngine {
     function remeasurePlacedChild(tree: borrow mut LayoutTree, childIndex: Int, width: Float, height: Float) {
         var result = tree
         let child = result.nodes[childIndex]
-        if child.childCount > 0 && (child.measuredSize.width != width || child.measuredSize.height != height) {
+        let resized = child.measuredSize.width != width || child.measuredSize.height != height
+        if child.childCount > 0 && resized {
+            // Place-time re-measure of a flexible child resolved to its final
+            // size: refresh its descendants' intrinsic sizes against the new
+            // available space so the placement cascade reads correct values.
+            // The clean-subtree skip lives in `measure` itself, which keeps this
+            // recursion shallow when descendants are rigid and unchanged.
             measure(tree: result, index: childIndex, available: Size(width: width, height: height))
         }
         result.nodes[childIndex].measuredSize = Size(width: width, height: height)
+        // Record whether placement forced a size different from the intrinsic
+        // measure. Flexible nodes (true) always recompute their top-down
+        // measure next frame; rigid nodes (false) become eligible to skip it.
+        result.nodes[childIndex].placeResized = resized
         return
     }
 
