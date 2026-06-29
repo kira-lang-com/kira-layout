@@ -1,0 +1,246 @@
+function layoutEngineTranslateSubtree(tree: borrow mut LayoutTree, index: Int, dx: Float, dy: Float) {
+    var result = tree
+    let node = result.nodes[index]
+    result.nodes[index].placedOrigin = Point(x: node.placedOrigin.x + dx, y: node.placedOrigin.y + dy)
+    result.nodes[index].placeOriginX = node.placeOriginX + dx
+    result.nodes[index].placeOriginY = node.placeOriginY + dy
+    var i = 0
+    while i < node.childCount {
+        layoutEngineTranslateSubtree(tree: result, index: node.firstChild + i, dx: dx, dy: dy)
+        i = i + 1
+    }
+    return
+}
+
+function layoutEnginePlace(tree: borrow mut LayoutTree, index: Int, origin: borrow Point) {
+    var result = tree
+    let node = result.nodes[index]
+    if !node.subtreeDirty && node.placeCacheValid && node.placeMeasuredW == node.measuredSize.width && node.placeMeasuredH == node.measuredSize.height {
+        if node.placeOriginX == origin.x && node.placeOriginY == origin.y {
+            result.placeSkips = result.placeSkips + 1
+            return
+        }
+        layoutEngineTranslateSubtree(tree: result, index: index, dx: origin.x - node.placeOriginX, dy: origin.y - node.placeOriginY)
+        result.placeSkips = result.placeSkips + 1
+        return
+    }
+    result.placeComputes = result.placeComputes + 1
+    result.nodes[index].placedOrigin = origin
+    let innerOrigin = Point(x: origin.x + node.padL, y: origin.y + node.padT)
+    let innerSize = Size(
+        width: nonNegative(value: node.measuredSize.width - (node.padL + node.padR)),
+        height: nonNegative(value: node.measuredSize.height - (node.padT + node.padB))
+    )
+    if node.arrangeCode == 1 {
+        layoutEnginePlaceStack(tree: result, index: index, origin: innerOrigin, available: innerSize)
+    } else if node.arrangeCode == 2 {
+        layoutEnginePlaceAbsolute(tree: result, index: index, origin: innerOrigin)
+    } else if node.arrangeCode == 3 {
+        layoutEnginePlaceGrid(tree: result, index: index, origin: innerOrigin, available: innerSize)
+    } else if node.arrangeCode == 4 {
+        layoutEnginePlaceWrap(tree: result, index: index, origin: innerOrigin, available: innerSize)
+    } else if node.arrangeCode == 5 {
+        layoutEnginePlaceOverlay(tree: result, index: index, origin: innerOrigin, available: innerSize)
+    } else {
+        layoutEnginePlaceFill(tree: result, index: index, origin: innerOrigin, available: innerSize)
+    }
+    result.nodes[index].placeCacheValid = true
+    result.nodes[index].placeOriginX = origin.x
+    result.nodes[index].placeOriginY = origin.y
+    result.nodes[index].placeMeasuredW = result.nodes[index].measuredSize.width
+    result.nodes[index].placeMeasuredH = result.nodes[index].measuredSize.height
+    return
+}
+
+function layoutEngineStackFillCount(tree: borrow LayoutTree, index: Int) -> Int {
+    let node = tree.nodes[index]
+    var total = 0
+    var i = 0
+    while i < node.childCount {
+        let child = tree.nodes[node.firstChild + i]
+        if node.axisCode == 1 {
+            total = total + (layoutEngineSizeModeIsFill(kind: child.wKind) ? 1 : 0)
+        } else {
+            total = total + (layoutEngineSizeModeIsFill(kind: child.hKind) ? 1 : 0)
+        }
+        i = i + 1
+    }
+    return total
+}
+
+function layoutEngineStackFlexTotal(tree: borrow LayoutTree, index: Int) -> Int {
+    let node = tree.nodes[index]
+    var total = 0
+    var i = 0
+    while i < node.childCount {
+        let child = tree.nodes[node.firstChild + i]
+        let wantsFill = node.axisCode == 1 ? layoutEngineSizeModeIsFill(kind: child.wKind) : layoutEngineSizeModeIsFill(kind: child.hKind)
+        if wantsFill {
+            total = total + (child.flex > 0 ? child.flex : 1)
+        }
+        i = i + 1
+    }
+    return total
+}
+
+function layoutEngineStackFixedTotal(tree: borrow LayoutTree, index: Int) -> Float {
+    let node = tree.nodes[index]
+    var total = 0.0
+    var i = 0
+    while i < node.childCount {
+        let child = tree.nodes[node.firstChild + i]
+        if node.axisCode == 1 {
+            total = total + (layoutEngineSizeModeIsFill(kind: child.wKind) ? 0.0 : outerWidth(node: child))
+        } else {
+            total = total + (layoutEngineSizeModeIsFill(kind: child.hKind) ? 0.0 : outerHeight(node: child))
+        }
+        i = i + 1
+    }
+    return total
+}
+
+function layoutEngineRemeasurePlacedChild(tree: borrow mut LayoutTree, childIndex: Int, width: Float, height: Float) {
+    var result = tree
+    let child = result.nodes[childIndex]
+    let resized = child.measuredSize.width != width || child.measuredSize.height != height
+    if child.childCount > 0 && resized {
+        layoutEngineMeasure(tree: result, index: childIndex, available: Size(width: width, height: height))
+    }
+    result.nodes[childIndex].measuredSize = Size(width: width, height: height)
+    result.nodes[childIndex].placeResized = resized
+    return
+}
+
+function layoutEnginePlaceStack(tree: borrow mut LayoutTree, index: Int, origin: borrow Point, available: borrow Size) {
+    var result = tree
+    let node = result.nodes[index]
+    let fillCount = layoutEngineStackFillCount(tree: result, index: index)
+    let flexTotal = layoutEngineStackFlexTotal(tree: result, index: index)
+    let fixedTotal = layoutEngineStackFixedTotal(tree: result, index: index)
+    let mainAvailable = node.axisCode == 1 ? available.width : available.height
+    let remaining = nonNegative(value: mainAvailable - fixedTotal - repeatedSpacing(count: node.childCount, spacing: node.spacing))
+    let fillSize = flexTotal > 0 ? remaining / intAsFloat(value: flexTotal) : (fillCount > 0 ? remaining / intAsFloat(value: fillCount) : 0.0)
+    var cursor = node.axisCode == 1 ? origin.x : origin.y
+    var i = 0
+    while i < node.childCount {
+        let childIndex = node.firstChild + i
+        let child = result.nodes[childIndex]
+        let flex = child.flex > 0 ? child.flex : 1
+        var width = child.measuredSize.width
+        var height = child.measuredSize.height
+        if node.axisCode == 1 {
+            width = layoutEngineResolvedStackMainSize(kind: child.wKind, current: width, fillSize: fillSize, flex: flex)
+            height = layoutEngineResolvedStackCrossSize(alignmentCode: node.alignCode, current: height, available: available.height, marginTotal: child.marT + child.marB)
+            layoutEngineRemeasurePlacedChild(tree: result, childIndex: childIndex, width: width, height: height)
+            let crossOffset = layoutEngineComputeCrossOffset(childSize: outerHeight(node: result.nodes[childIndex]), available: available.height, alignmentCode: node.alignCode)
+            layoutEnginePlace(tree: result, index: childIndex, origin: Point(x: cursor + child.marL, y: origin.y + crossOffset + child.marT))
+            cursor = cursor + outerWidth(node: result.nodes[childIndex]) + node.spacing
+        } else {
+            height = layoutEngineResolvedStackMainSize(kind: child.hKind, current: height, fillSize: fillSize, flex: flex)
+            width = layoutEngineResolvedStackCrossSize(alignmentCode: node.alignCode, current: width, available: available.width, marginTotal: child.marL + child.marR)
+            layoutEngineRemeasurePlacedChild(tree: result, childIndex: childIndex, width: width, height: height)
+            let crossOffset = layoutEngineComputeCrossOffset(childSize: outerWidth(node: result.nodes[childIndex]), available: available.width, alignmentCode: node.alignCode)
+            layoutEnginePlace(tree: result, index: childIndex, origin: Point(x: origin.x + crossOffset + child.marL, y: cursor + child.marT))
+            cursor = cursor + outerHeight(node: result.nodes[childIndex]) + node.spacing
+        }
+        i = i + 1
+    }
+    return
+}
+
+function layoutEnginePlaceAbsolute(tree: borrow mut LayoutTree, index: Int, origin: borrow Point) {
+    var result = tree
+    let node = result.nodes[index]
+    var i = 0
+    while i < node.childCount {
+        let childIndex = node.firstChild + i
+        let child = result.nodes[childIndex]
+        layoutEnginePlace(tree: result, index: childIndex, origin: Point(x: origin.x + child.dx + child.marL, y: origin.y + child.dy + child.marT))
+        i = i + 1
+    }
+    return
+}
+
+function layoutEnginePlaceFill(tree: borrow mut LayoutTree, index: Int, origin: borrow Point, available: borrow Size) {
+    var result = tree
+    let node = result.nodes[index]
+    if node.childCount > 0 {
+        let childIndex = node.firstChild
+        let child = result.nodes[childIndex]
+        let size = Size(
+            width: nonNegative(value: available.width - (child.marL + child.marR)),
+            height: nonNegative(value: available.height - (child.marT + child.marB))
+        )
+        layoutEngineRemeasurePlacedChild(tree: result, childIndex: childIndex, width: size.width, height: size.height)
+        layoutEnginePlace(tree: result, index: childIndex, origin: Point(x: origin.x + child.marL, y: origin.y + child.marT))
+    }
+    return
+}
+
+function layoutEnginePlaceOverlay(tree: borrow mut LayoutTree, index: Int, origin: borrow Point, available: borrow Size) {
+    var result = tree
+    let node = result.nodes[index]
+    var i = 0
+    while i < node.childCount {
+        let childIndex = node.firstChild + i
+        let child = result.nodes[childIndex]
+        let outer = Size(width: outerWidth(node: child), height: outerHeight(node: child))
+        let outerOrigin = layoutEngineAlignedOrigin(child: outer, container: available, origin: origin, alignmentCode: node.overlayAlignCode)
+        layoutEnginePlace(tree: result, index: childIndex, origin: Point(x: outerOrigin.x + child.marL, y: outerOrigin.y + child.marT))
+        i = i + 1
+    }
+    return
+}
+
+function layoutEnginePlaceGrid(tree: borrow mut LayoutTree, index: Int, origin: borrow Point, available: borrow Size) {
+    var result = tree
+    let node = result.nodes[index]
+    if node.columns <= 0 {
+        return
+    }
+    let cellWidth = (available.width - repeatedSpacing(count: node.columns, spacing: node.spacing)) / intAsFloat(value: node.columns)
+    var rowY = origin.y
+    var rowHeight = 0.0
+    var i = 0
+    while i < node.childCount {
+        let column = i % node.columns
+        if column == 0 && i > 0 {
+            rowY = rowY + rowHeight + node.rowSpacing
+            rowHeight = 0.0
+        }
+        let childIndex = node.firstChild + i
+        let child = result.nodes[childIndex]
+        let width = layoutEngineSizeModeIsFill(kind: child.wKind) ? nonNegative(value: cellWidth - (child.marL + child.marR)) : child.measuredSize.width
+        layoutEngineRemeasurePlacedChild(tree: result, childIndex: childIndex, width: width, height: child.measuredSize.height)
+        layoutEnginePlace(tree: result, index: childIndex, origin: Point(x: origin.x + intAsFloat(value: column) * (cellWidth + node.spacing) + child.marL, y: rowY + child.marT))
+        rowHeight = rowHeight > outerHeight(node: result.nodes[childIndex]) ? rowHeight : outerHeight(node: result.nodes[childIndex])
+        i = i + 1
+    }
+    return
+}
+
+function layoutEnginePlaceWrap(tree: borrow mut LayoutTree, index: Int, origin: borrow Point, available: borrow Size) {
+    var result = tree
+    let node = result.nodes[index]
+    var cursorX = origin.x
+    var cursorY = origin.y
+    var rowHeight = 0.0
+    var i = 0
+    while i < node.childCount {
+        let childIndex = node.firstChild + i
+        let child = result.nodes[childIndex]
+        let childWidth = outerWidth(node: child)
+        let childHeight = outerHeight(node: child)
+        if cursorX > origin.x && cursorX + childWidth > origin.x + available.width {
+            cursorX = origin.x
+            cursorY = cursorY + rowHeight + node.rowSpacing
+            rowHeight = 0.0
+        }
+        let crossOffset = layoutEngineComputeCrossOffset(childSize: childHeight, available: rowHeight > childHeight ? rowHeight : childHeight, alignmentCode: node.alignCode)
+        layoutEnginePlace(tree: result, index: childIndex, origin: Point(x: cursorX + child.marL, y: cursorY + crossOffset + child.marT))
+        cursorX = cursorX + childWidth + node.spacing
+        rowHeight = rowHeight > childHeight ? rowHeight : childHeight
+        i = i + 1
+    }
+    return
+}

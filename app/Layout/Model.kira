@@ -19,11 +19,32 @@ struct LayoutDescriptor {
 }
 
 struct LayoutNode {
-    var descriptor: LayoutDescriptor
     var measuredSize: Size
     var placedOrigin: Point
     var firstChild: Int = 0
     var childCount: Int = 0
+    var wKind: Int = 0
+    var wVal: Float = 0.0
+    var hKind: Int = 0
+    var hVal: Float = 0.0
+    var flex: Int = 0
+    var arrangeCode: Int = 0
+    var axisCode: Int = 0
+    var spacing: Float = 0.0
+    var rowSpacing: Float = 0.0
+    var alignCode: Int = 0
+    var overlayAlignCode: Int = 0
+    var columns: Int = 0
+    var padL: Float = 0.0
+    var padT: Float = 0.0
+    var padR: Float = 0.0
+    var padB: Float = 0.0
+    var marL: Float = 0.0
+    var marT: Float = 0.0
+    var marR: Float = 0.0
+    var marB: Float = 0.0
+    var dx: Float = 0.0
+    var dy: Float = 0.0
 
     // --- Retained layout cache ---------------------------------------------
     // `subtreeDirty` is owned by the layout pass: it is true when this node or
@@ -65,6 +86,15 @@ struct LayoutNode {
 
 struct LayoutTree {
     var nodes: [LayoutNode]
+    // Per-node `LayoutDescriptor`, parallel to `nodes` (same index space). The
+    // descriptor is the heap-bearing source-of-truth (SizeMode payloads,
+    // EdgeInsets) that `collect` flattens into the node's inline scalar fields.
+    // It is kept OFF `LayoutNode` deliberately: the measure/place hot path binds
+    // `nodes[i]` thousands of times per resize frame, and embedding the
+    // descriptor would deep-copy it on every such bind. The engine never reads
+    // this array; only `collect` (flatten once) and `runIncremental`
+    // (descriptor compare/patch) touch it. Engine-only trees may leave it empty.
+    var descriptors: [LayoutDescriptor] = []
     // Instrumentation: how many subtree roots the most recent measure/place
     // pass actually recomputed versus reused from cache. Reset at the start of
     // each pass. Lets callers and tests prove recomputation reduction.
@@ -246,13 +276,73 @@ function sizeModeEqual(a: SizeMode, b: SizeMode) -> Bool {
 }
 
 function sizeModeIsFixed(mode: borrow SizeMode) -> Bool {
+    return sizeModeIsFixedKind(kind: sizeModeKind(mode))
+}
+
+function sizeModeKind(mode: borrow SizeMode) -> Int {
     match mode {
-        Fixed(value) -> return true;
-        Fill -> return false;
-        Hug -> return false;
-        Fraction(of) -> return false;
-        Min(value) -> return false;
-        Max(value) -> return false;
+        Fixed(value) -> return 1;
+        Fill -> return 2;
+        Hug -> return 3;
+        Fraction(of) -> return 4;
+        Min(value) -> return 5;
+        Max(value) -> return 6;
+    }
+}
+
+function sizeModeValue(mode: borrow SizeMode) -> Float {
+    match mode {
+        Fixed(value) -> return value;
+        Fill -> return 0.0;
+        Hug -> return 0.0;
+        Fraction(of) -> return of;
+        Min(value) -> return value;
+        Max(value) -> return value;
+    }
+}
+
+function sizeModeIsFixedKind(kind: Int) -> Bool {
+    return kind == 1
+}
+
+function arrangeModeCode(arrange: borrow ArrangeMode) -> Int {
+    match arrange {
+        Stack -> return 1;
+        Absolute -> return 2;
+        Grid -> return 3;
+        Wrap -> return 4;
+        Overlay -> return 5;
+        Fill -> return 6;
+    }
+}
+
+function axisValueCode(axis: borrow Axis) -> Int {
+    match axis {
+        Horizontal -> return 1;
+        Vertical -> return 2;
+    }
+}
+
+function crossAlignmentCode(alignment: borrow CrossAlignment) -> Int {
+    match alignment {
+        Start -> return 1;
+        Center -> return 2;
+        End -> return 3;
+        Stretch -> return 4;
+    }
+}
+
+function alignmentValueCode(alignment: borrow Alignment) -> Int {
+    match alignment {
+        TopLeading -> return 1;
+        Top -> return 2;
+        TopTrailing -> return 3;
+        Leading -> return 4;
+        Center -> return 5;
+        Trailing -> return 6;
+        BottomLeading -> return 7;
+        Bottom -> return 8;
+        BottomTrailing -> return 9;
     }
 }
 
@@ -262,6 +352,51 @@ function sizeModeIsFixed(mode: borrow SizeMode) -> Bool {
 /// is built (relayout reuses it).
 function layoutDescriptorOfferIndependent(desc: borrow LayoutDescriptor) -> Bool {
     return sizeModeIsFixed(desc.width) && sizeModeIsFixed(desc.height)
+}
+
+function layoutNodeOfferIndependent(node: borrow LayoutNode) -> Bool {
+    return sizeModeIsFixedKind(kind: node.wKind) && sizeModeIsFixedKind(kind: node.hKind)
+}
+
+function layoutNodeFlattenDescriptor(node: LayoutNode, desc: borrow LayoutDescriptor) -> LayoutNode {
+    var result = node
+    result.wKind = sizeModeKind(desc.width)
+    result.wVal = sizeModeValue(desc.width)
+    result.hKind = sizeModeKind(desc.height)
+    result.hVal = sizeModeValue(desc.height)
+    result.flex = desc.flex
+    result.arrangeCode = arrangeModeCode(desc.arrange)
+    result.axisCode = axisValueCode(desc.axis)
+    result.spacing = desc.spacing
+    result.rowSpacing = desc.rowSpacing
+    result.alignCode = crossAlignmentCode(desc.alignment)
+    result.overlayAlignCode = alignmentValueCode(desc.overlayAlignment)
+    result.columns = desc.columns
+    result.padL = desc.padding.leading
+    result.padT = desc.padding.top
+    result.padR = desc.padding.trailing
+    result.padB = desc.padding.bottom
+    result.marL = desc.margin.leading
+    result.marT = desc.margin.top
+    result.marR = desc.margin.trailing
+    result.marB = desc.margin.bottom
+    result.dx = desc.x
+    result.dy = desc.y
+    result.offerIndependent = layoutNodeOfferIndependent(result)
+    return result
+}
+
+/// Flatten every node's descriptor into its inline scalar fields, reading from
+/// the tree's parallel `descriptors` array. Requires `descriptors` to be
+/// populated and index-aligned with `nodes`.
+function layoutTreeFlattenDescriptors(tree: LayoutTree) -> LayoutTree {
+    var result = tree
+    var index = 0
+    while index < result.nodes.count {
+        result.nodes[index] = layoutNodeFlattenDescriptor(result.nodes[index], result.descriptors[index])
+        index = index + 1
+    }
+    return result
 }
 
 function edgeInsetsEqual(a: borrow EdgeInsets, b: borrow EdgeInsets) -> Bool {
@@ -298,21 +433,13 @@ function layoutFrame(tree: borrow LayoutTree, index: Int) -> Rect {
 }
 
 function layoutNodeWithSize(node: borrow LayoutNode, size: borrow Size) -> LayoutNode {
-    return LayoutNode(
-        descriptor: node.descriptor,
-        measuredSize: size,
-        placedOrigin: node.placedOrigin,
-        firstChild: node.firstChild,
-        childCount: node.childCount
-    )
+    var result = node
+    result.measuredSize = size
+    return result
 }
 
 function layoutNodeWithOrigin(node: borrow LayoutNode, origin: borrow Point) -> LayoutNode {
-    return LayoutNode(
-        descriptor: node.descriptor,
-        measuredSize: node.measuredSize,
-        placedOrigin: origin,
-        firstChild: node.firstChild,
-        childCount: node.childCount
-    )
+    var result = node
+    result.placedOrigin = origin
+    return result
 }

@@ -1,0 +1,95 @@
+function layoutEngineResolveSizeMode(kind: Int, value: Float, available: Float, content: Float) -> Float {
+    if kind == 1 {
+        return nonNegative(value: value)
+    }
+    if kind == 2 {
+        return nonNegative(value: available)
+    }
+    if kind == 3 {
+        return nonNegative(value: content)
+    }
+    if kind == 4 {
+        return nonNegative(value: available * value)
+    }
+    if kind == 5 {
+        return content > value ? content : value
+    }
+    return content < value ? content : value
+}
+
+function layoutEngineResolveOuterSize(kind: Int, value: Float, available: Float, content: Float, padding: Float) -> Float {
+    if kind == 1 {
+        return nonNegative(value: value)
+    }
+    if kind == 2 {
+        return nonNegative(value: available)
+    }
+    if kind == 3 {
+        return nonNegative(value: content + padding)
+    }
+    if kind == 4 {
+        return nonNegative(value: available * value)
+    }
+    if kind == 5 {
+        return content + padding > value ? content + padding : value
+    }
+    return content + padding < value ? content + padding : value
+}
+
+function layoutEngineSizeModeIsFill(kind: Int) -> Bool {
+    return kind == 2
+}
+
+function layoutEngineComputeCrossOffset(childSize: Float, available: Float, alignmentCode: Int) -> Float {
+    if alignmentCode == 1 {
+        return 0.0
+    }
+    if alignmentCode == 2 {
+        return (available - childSize) / 2.0
+    }
+    if alignmentCode == 3 {
+        return available - childSize
+    }
+    return 0.0
+}
+
+function layoutEngineResolvedStackMainSize(kind: Int, current: Float, fillSize: Float, flex: Int) -> Float {
+    if kind == 2 {
+        return fillSize * intAsFloat(value: flex)
+    }
+    return current
+}
+
+function layoutEngineResolvedStackCrossSize(alignmentCode: Int, current: Float, available: Float, marginTotal: Float) -> Float {
+    if alignmentCode == 4 {
+        return nonNegative(value: available - marginTotal)
+    }
+    return current
+}
+
+function layoutEngineAlignedOrigin(child: borrow Size, container: borrow Size, origin: borrow Point, alignmentCode: Int) -> Point {
+    var dx = 0.0
+    var dy = 0.0
+    if alignmentCode == 2 {
+        dx = (container.width - child.width) / 2.0
+    } else if alignmentCode == 3 {
+        dx = container.width - child.width
+    } else if alignmentCode == 5 {
+        dx = (container.width - child.width) / 2.0
+        dy = (container.height - child.height) / 2.0
+    } else if alignmentCode == 6 {
+        dx = container.width - child.width
+        dy = (container.height - child.height) / 2.0
+    } else if alignmentCode == 7 {
+        dy = container.height - child.height
+    } else if alignmentCode == 8 {
+        dx = (container.width - child.width) / 2.0
+        dy = container.height - child.height
+    } else if alignmentCode == 9 {
+        dx = container.width - child.width
+        dy = container.height - child.height
+    } else if alignmentCode == 4 {
+        dy = (container.height - child.height) / 2.0
+    }
+    return Point(x: origin.x + dx, y: origin.y + dy)
+}

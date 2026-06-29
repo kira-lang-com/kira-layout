@@ -16,63 +16,57 @@ function repeatedSpacing(count: Int, spacing: Float) -> Float {
 }
 
 function outerWidth(node: borrow LayoutNode) -> Float {
-    return node.measuredSize.width + edgeInsetsHorizontalTotal(insets: node.descriptor.margin)
+    return node.measuredSize.width + node.marL + node.marR
 }
 
 function outerHeight(node: borrow LayoutNode) -> Float {
-    return node.measuredSize.height + edgeInsetsVerticalTotal(insets: node.descriptor.margin)
+    return node.measuredSize.height + node.marT + node.marB
 }
 
-function constrainedChildAxisOffer(parentAvailable: Float, sizeMode: SizeMode) -> Float {
-    match sizeMode {
-        Fixed(value) -> return nonNegative(value: value);
-        Fill -> return nonNegative(value: parentAvailable);
-        Fraction(of) -> return nonNegative(value: parentAvailable * of);
-        Min(value) -> return parentAvailable > value ? parentAvailable : value;
-        Max(value) -> return parentAvailable < value ? parentAvailable : value;
-        Hug -> return parentAvailable;
+function constrainedChildAxisOffer(parentAvailable: Float, kind: Int, value: Float) -> Float {
+    if kind == 1 {
+        return nonNegative(value: value)
     }
+    if kind == 2 {
+        return nonNegative(value: parentAvailable)
+    }
+    if kind == 4 {
+        return nonNegative(value: parentAvailable * value)
+    }
+    if kind == 5 {
+        return parentAvailable > value ? parentAvailable : value
+    }
+    if kind == 6 {
+        return parentAvailable < value ? parentAvailable : value
+    }
+    return parentAvailable
 }
 
-function childAvailableSize(parentAvailable: borrow Size, parent: borrow LayoutDescriptor, child: borrow LayoutNode, childCount: Int) -> Size {
-    let margin = child.descriptor.margin
+function childAvailableSize(parentAvailable: borrow Size, parent: borrow LayoutNode, child: borrow LayoutNode, childCount: Int) -> Size {
     var width = parentAvailable.width
     var height = parentAvailable.height
 
-    match parent.arrange {
-        Stack -> {
+    if parent.arrangeCode == 1 {
         let totalSpacing = repeatedSpacing(count: childCount, spacing: parent.spacing)
-            match parent.axis {
-                Horizontal -> width = width - totalSpacing;
-                Vertical -> height = height - totalSpacing;
-            }
+        if parent.axisCode == 1 {
+            width = width - totalSpacing
+        } else {
+            height = height - totalSpacing
         }
-        Absolute -> {}
-        Grid -> {}
-        Wrap -> {}
-        Overlay -> {}
-        Fill -> {}
     }
 
-    match parent.arrange {
-        Grid -> {
-            if parent.columns > 0 {
-                let totalSpacing = repeatedSpacing(count: parent.columns, spacing: parent.spacing)
-                width = (width - totalSpacing) / intAsFloat(value: parent.columns)
-            }
+    if parent.arrangeCode == 3 {
+        if parent.columns > 0 {
+            let totalSpacing = repeatedSpacing(count: parent.columns, spacing: parent.spacing)
+            width = (width - totalSpacing) / intAsFloat(value: parent.columns)
         }
-        Stack -> {}
-        Absolute -> {}
-        Wrap -> {}
-        Overlay -> {
-            width = constrainedChildAxisOffer(parentAvailable.width, parent.width)
-            height = constrainedChildAxisOffer(parentAvailable.height, parent.height)
-        }
-        Fill -> {}
+    } else if parent.arrangeCode == 5 {
+        width = constrainedChildAxisOffer(parentAvailable.width, parent.wKind, parent.wVal)
+        height = constrainedChildAxisOffer(parentAvailable.height, parent.hKind, parent.hVal)
     }
 
     return Size(
-        width: nonNegative(value: width - edgeInsetsHorizontalTotal(insets: margin)),
-        height: nonNegative(value: height - edgeInsetsVerticalTotal(insets: margin))
+        width: nonNegative(value: width - (child.marL + child.marR)),
+        height: nonNegative(value: height - (child.marT + child.marB))
     )
 }
