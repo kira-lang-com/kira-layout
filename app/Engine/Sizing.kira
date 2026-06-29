@@ -16,11 +16,11 @@ function repeatedSpacing(count: Int, spacing: Float) -> Float {
 }
 
 function outerWidth(node: borrow LayoutNode) -> Float {
-    return node.measuredSize.width + node.marL + node.marR
+    return node.measuredW + node.marL + node.marR
 }
 
 function outerHeight(node: borrow LayoutNode) -> Float {
-    return node.measuredSize.height + node.marT + node.marB
+    return node.measuredH + node.marT + node.marB
 }
 
 function constrainedChildAxisOffer(parentAvailable: Float, kind: Int, value: Float) -> Float {

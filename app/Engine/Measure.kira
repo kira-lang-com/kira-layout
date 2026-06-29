@@ -24,11 +24,18 @@ function layoutEngineMeasure(tree: borrow mut LayoutTree, index: Int, available:
     let verticalPadding = node.padT + node.padB
     let resolvedWidth = layoutEngineResolveOuterSize(kind: node.wKind, value: node.wVal, available: available.width, content: contentSize.width, padding: horizontalPadding)
     let resolvedHeight = layoutEngineResolveOuterSize(kind: node.hKind, value: node.hVal, available: available.height, content: contentSize.height, padding: verticalPadding)
-    let finalSize = Size(width: resolvedWidth, height: resolvedHeight)
-    result.nodes[index].measuredSize = finalSize
-    result.nodes[index].measureCacheValid = true
-    result.nodes[index].measureOfferW = available.width
-    result.nodes[index].measureOfferH = available.height
+    // Write the measure results back in a single element store. The child
+    // recursion above never touches `index`, so the node still matches `node`;
+    // mutating one copy and storing it once costs a single array_get/array_set
+    // pair instead of one per field (each field write would otherwise re-copy
+    // the whole node).
+    var out = node
+    out.measuredW = resolvedWidth
+    out.measuredH = resolvedHeight
+    out.measureCacheValid = true
+    out.measureOfferW = available.width
+    out.measureOfferH = available.height
+    result.nodes[index] = out
     return
 }
 

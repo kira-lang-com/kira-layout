@@ -19,8 +19,14 @@ struct LayoutDescriptor {
 }
 
 struct LayoutNode {
-    var measuredSize: Size
-    var placedOrigin: Point
+    // Resolved geometry, stored as inline scalars (not `Size`/`Point` structs):
+    // a node is bound (`let node = tree.nodes[i]`) thousands of times per resize
+    // frame, and a nested struct field would deep-copy a heap `Size` + `Point` on
+    // every such bind. Scalars ride along in the node's own value slice for free.
+    var measuredW: Float = 0.0
+    var measuredH: Float = 0.0
+    var originX: Float = 0.0
+    var originY: Float = 0.0
     var firstChild: Int = 0
     var childCount: Int = 0
     var wKind: Int = 0
@@ -429,17 +435,19 @@ function layoutDescriptorEqual(a: borrow LayoutDescriptor, b: borrow LayoutDescr
 
 function layoutFrame(tree: borrow LayoutTree, index: Int) -> Rect {
     let node = tree.nodes[index]
-    return Rect(x: node.placedOrigin.x, y: node.placedOrigin.y, width: node.measuredSize.width, height: node.measuredSize.height)
+    return Rect(x: node.originX, y: node.originY, width: node.measuredW, height: node.measuredH)
 }
 
 function layoutNodeWithSize(node: borrow LayoutNode, size: borrow Size) -> LayoutNode {
     var result = node
-    result.measuredSize = size
+    result.measuredW = size.width
+    result.measuredH = size.height
     return result
 }
 
 function layoutNodeWithOrigin(node: borrow LayoutNode, origin: borrow Point) -> LayoutNode {
     var result = node
-    result.placedOrigin = origin
+    result.originX = origin.x
+    result.originY = origin.y
     return result
 }
