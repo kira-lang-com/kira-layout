@@ -140,6 +140,23 @@ function layoutMarkAllDirty(tree: LayoutTree) -> LayoutTree {
     return t
 }
 
+/// Mark the entire tree clean. After a full layout every node's cached
+/// measure/place state is valid, so clearing `subtreeDirty` lets the next pass
+/// reuse it: a re-layout against a new offer (a resize) then recomputes only the
+/// nodes whose incoming constraints actually changed, and reuses the cached
+/// geometry for every subtree whose offer and origin are unchanged. Sound only
+/// when the descriptors did not change (the retained re-layout path, where the
+/// view tree and every descriptor are identical and only the viewport differs).
+function layoutMarkAllClean(tree: LayoutTree) -> LayoutTree {
+    var t = tree
+    var i = 0
+    while i < t.nodes.count {
+        t.nodes[i].subtreeDirty = false
+        i = i + 1
+    }
+    return t
+}
+
 /// True when two flat trees have identical structure (node count and each
 /// node's child span). When structure matches, the cached tree can be reused
 /// with patched descriptors; otherwise a full rebuild is required.
