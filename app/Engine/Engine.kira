@@ -63,12 +63,14 @@ struct LayoutEngine {
     function measure(tree: borrow mut LayoutTree, index: Int, available: borrow Size) {
         var result = tree
         let node = result.nodes[index]
-        // Retained skip: a clean, offer-stable, rigid subtree keeps its cached
-        // sizes. `placeResized` being false means no parent forced this node to
-        // a size different from its intrinsic measure, so its measuredSize is
-        // exactly what a recompute would produce and the subtree below it is
-        // already correct.
-        if !node.subtreeDirty && node.measureCacheValid && !node.placeResized && node.measureOfferW == available.width && node.measureOfferH == available.height {
+        // Retained skip: a clean, rigid subtree keeps its cached sizes.
+        // `placeResized` being false means no parent forced this node to a size
+        // different from its intrinsic measure, so its measuredSize is exactly
+        // what a recompute would produce and the subtree below it is already
+        // correct. The skip is valid when the offer is unchanged, OR when the
+        // node is offer-independent (Fixed x Fixed) — then its size is invariant
+        // under a resize and no offer change can alter it.
+        if !node.subtreeDirty && node.measureCacheValid && !node.placeResized && (node.offerIndependent || (node.measureOfferW == available.width && node.measureOfferH == available.height)) {
             result.measureSkips = result.measureSkips + 1
             return
         }
@@ -246,6 +248,24 @@ struct LayoutEngine {
         return Size(width: width, height: height)
     }
 
+    // Shift a subtree's cached origins by (dx, dy) without re-running placement.
+    // Used when a node keeps its measured size but moves: every descendant origin
+    // moves by the same delta, so this reproduces a full re-placement exactly while
+    // touching only Points (never a descriptor).
+    function translateSubtree(tree: borrow mut LayoutTree, index: Int, dx: Float, dy: Float) {
+        var result = tree
+        let node = result.nodes[index]
+        result.nodes[index].placedOrigin = Point(x: node.placedOrigin.x + dx, y: node.placedOrigin.y + dy)
+        result.nodes[index].placeOriginX = node.placeOriginX + dx
+        result.nodes[index].placeOriginY = node.placeOriginY + dy
+        var i = 0
+        while i < node.childCount {
+            translateSubtree(tree: result, index: node.firstChild + i, dx: dx, dy: dy)
+            i = i + 1
+        }
+        return
+    }
+
     function place(tree: borrow mut LayoutTree, index: Int, origin: borrow Point) {
         var result = tree
         let node = result.nodes[index]
@@ -253,7 +273,16 @@ struct LayoutEngine {
         // measured size produces identical descendant origins, so the whole
         // placement recursion is unnecessary. Exact regardless of node kind,
         // because the resolved size is what is compared.
-        if !node.subtreeDirty && node.placeCacheValid && node.placeOriginX == origin.x && node.placeOriginY == origin.y && node.placeMeasuredW == node.measuredSize.width && node.placeMeasuredH == node.measuredSize.height {
+        if !node.subtreeDirty && node.placeCacheValid && node.placeMeasuredW == node.measuredSize.width && node.placeMeasuredH == node.measuredSize.height {
+            if node.placeOriginX == origin.x && node.placeOriginY == origin.y {
+                result.placeSkips = result.placeSkips + 1
+                return
+            }
+            // Same measured size, only the origin shifted (a resize moved this
+            // subtree without resizing it): the descendants' relative layout is
+            // identical, so translate every cached origin by the delta instead of
+            // re-running placement. Exact, and reads no descriptor.
+            translateSubtree(tree: result, index: index, dx: origin.x - node.placeOriginX, dy: origin.y - node.placeOriginY)
             result.placeSkips = result.placeSkips + 1
             return
         }

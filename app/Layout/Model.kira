@@ -55,6 +55,12 @@ struct LayoutNode {
     var placeOriginY: Float = 0.0
     var placeMeasuredW: Float = 0.0
     var placeMeasuredH: Float = 0.0
+    // True when this node's measured size does not depend on the offered size:
+    // both axes are Fixed, so the node (and its whole subtree's intrinsic sizing)
+    // is invariant under a resize. Such a node skips re-measure even when the
+    // offer changed — its cached measuredSize is exactly what a recompute would
+    // produce. Set once from the descriptor when the tree is built.
+    var offerIndependent: Bool = false
 }
 
 struct LayoutTree {
@@ -237,6 +243,25 @@ function sizeModeEqual(a: SizeMode, b: SizeMode) -> Bool {
             }
         }
     }
+}
+
+function sizeModeIsFixed(mode: borrow SizeMode) -> Bool {
+    match mode {
+        Fixed(value) -> return true;
+        Fill -> return false;
+        Hug -> return false;
+        Fraction(of) -> return false;
+        Min(value) -> return false;
+        Max(value) -> return false;
+    }
+}
+
+/// A node is offer-independent when both axes resolve to a Fixed size: its
+/// measured size is the same regardless of the offered constraints, so a resize
+/// can reuse its cached geometry without recomputing. Computed once when the tree
+/// is built (relayout reuses it).
+function layoutDescriptorOfferIndependent(desc: borrow LayoutDescriptor) -> Bool {
+    return sizeModeIsFixed(desc.width) && sizeModeIsFixed(desc.height)
 }
 
 function edgeInsetsEqual(a: borrow EdgeInsets, b: borrow EdgeInsets) -> Bool {
