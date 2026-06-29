@@ -434,8 +434,9 @@ function layoutDescriptorEqual(a: borrow LayoutDescriptor, b: borrow LayoutDescr
 }
 
 function layoutFrame(tree: borrow LayoutTree, index: Int) -> Rect {
-    let node = tree.nodes[index]
-    return Rect(x: node.originX, y: node.originY, width: node.measuredW, height: node.measuredH)
+    // Read the four geometry scalars directly through the array (borrow-elided)
+    // instead of cloning the whole ~40-field node. Called once per rendered view.
+    return Rect(x: tree.nodes[index].originX, y: tree.nodes[index].originY, width: tree.nodes[index].measuredW, height: tree.nodes[index].measuredH)
 }
 
 function layoutNodeWithSize(node: borrow LayoutNode, size: borrow Size) -> LayoutNode {
