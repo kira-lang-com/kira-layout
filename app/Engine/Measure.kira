@@ -1,71 +1,83 @@
+// Measure-skip predicate. Taking the node by `borrow` lets the caller pass
+// `tree.nodes[index]` directly: the VM borrow-elides the element read (no node
+// clone) and reads all the gate fields through the alias. Cloning the whole
+// ~40-field node just to test the skip condition was a per-frame hot spot.
+function layoutMeasureShouldSkip(node: borrow LayoutNode, offerW: Float, offerH: Float) -> Bool {
+    return !node.subtreeDirty && node.measureCacheValid && !node.placeResized && (node.offerIndependent || (node.measureOfferW == offerW && node.measureOfferH == offerH))
+}
+
 function layoutEngineMeasure(tree: borrow mut LayoutTree, index: Int, available: borrow Size) {
     var result = tree
-    let node = result.nodes[index]
-    if !node.subtreeDirty && node.measureCacheValid && !node.placeResized && (node.offerIndependent || (node.measureOfferW == available.width && node.measureOfferH == available.height)) {
+    if layoutMeasureShouldSkip(node: result.nodes[index], offerW: available.width, offerH: available.height) {
         result.measureSkips = result.measureSkips + 1
         return
     }
     result.measureComputes = result.measureComputes + 1
+    // Read node fields directly through the array. Each `result.nodes[index].f`
+    // borrow-elides to an aliased element read of a single scalar instead of
+    // cloning the whole node into a local. `childCount`/`firstChild` are hoisted
+    // into scalar locals because they drive the loop; the recursion never mutates
+    // `index`, so these stay valid across it.
+    let childCount = result.nodes[index].childCount
+    let firstChild = result.nodes[index].firstChild
     let innerAvailable = Size(
-        width: nonNegative(value: available.width - (node.padL + node.padR)),
-        height: nonNegative(value: available.height - (node.padT + node.padB))
+        width: nonNegative(value: available.width - (result.nodes[index].padL + result.nodes[index].padR)),
+        height: nonNegative(value: available.height - (result.nodes[index].padT + result.nodes[index].padB))
     )
 
     var i = 0
-    while i < node.childCount {
-        let childIndex = node.firstChild + i
-        let childOffer = childAvailableSize(parentAvailable: innerAvailable, parent: node, child: result.nodes[childIndex], childCount: node.childCount)
+    while i < childCount {
+        let childIndex = firstChild + i
+        let childOffer = childAvailableSize(parentAvailable: innerAvailable, parent: result.nodes[index], child: result.nodes[childIndex], childCount: childCount)
         layoutEngineMeasure(tree: result, index: childIndex, available: childOffer)
         i = i + 1
     }
 
     let contentSize = layoutEngineComputeContentSize(tree: result, index: index, available: innerAvailable)
-    let horizontalPadding = node.padL + node.padR
-    let verticalPadding = node.padT + node.padB
-    let resolvedWidth = layoutEngineResolveOuterSize(kind: node.wKind, value: node.wVal, available: available.width, content: contentSize.width, padding: horizontalPadding)
-    let resolvedHeight = layoutEngineResolveOuterSize(kind: node.hKind, value: node.hVal, available: available.height, content: contentSize.height, padding: verticalPadding)
-    // Write the measure results back in a single element store. The child
-    // recursion above never touches `index`, so the node still matches `node`;
-    // mutating one copy and storing it once costs a single array_get/array_set
-    // pair instead of one per field (each field write would otherwise re-copy
-    // the whole node).
-    var out = node
-    out.measuredW = resolvedWidth
-    out.measuredH = resolvedHeight
-    out.measureCacheValid = true
-    out.measureOfferW = available.width
-    out.measureOfferH = available.height
-    result.nodes[index] = out
+    let resolvedWidth = layoutEngineResolveOuterSize(kind: result.nodes[index].wKind, value: result.nodes[index].wVal, available: available.width, content: contentSize.width, padding: result.nodes[index].padL + result.nodes[index].padR)
+    let resolvedHeight = layoutEngineResolveOuterSize(kind: result.nodes[index].hKind, value: result.nodes[index].hVal, available: available.height, content: contentSize.height, padding: result.nodes[index].padT + result.nodes[index].padB)
+    // In-place scalar write-back. The child recursion above never touches
+    // `index`, so the element still holds everything except the geometry we
+    // overwrite here. Each store borrow-elides to an aliased in-place field write
+    // (no node clone, no array_set).
+    result.nodes[index].measuredW = resolvedWidth
+    result.nodes[index].measuredH = resolvedHeight
+    result.nodes[index].measureCacheValid = true
+    result.nodes[index].measureOfferW = available.width
+    result.nodes[index].measureOfferH = available.height
     return
 }
 
 function layoutEngineComputeContentSize(tree: borrow LayoutTree, index: Int, available: borrow Size) -> Size {
-    let node = tree.nodes[index]
-    if node.arrangeCode == 1 {
+    let arrangeCode = tree.nodes[index].arrangeCode
+    if arrangeCode == 1 {
         return layoutEngineComputeStackContentSize(tree: tree, index: index)
     }
-    if node.arrangeCode == 2 {
+    if arrangeCode == 2 {
         return layoutEngineComputeAbsoluteContentSize(tree: tree, index: index)
     }
-    if node.arrangeCode == 3 {
+    if arrangeCode == 3 {
         return layoutEngineComputeGridContentSize(tree: tree, index: index)
     }
-    if node.arrangeCode == 4 {
+    if arrangeCode == 4 {
         return layoutEngineComputeWrapContentSize(tree: tree, index: index, available: available)
     }
     return layoutEngineComputeOverlayContentSize(tree: tree, index: index)
 }
 
 function layoutEngineComputeStackContentSize(tree: borrow LayoutTree, index: Int) -> Size {
-    let node = tree.nodes[index]
+    let childCount = tree.nodes[index].childCount
+    let firstChild = tree.nodes[index].firstChild
+    let axisCode = tree.nodes[index].axisCode
+    let spacing = tree.nodes[index].spacing
     var width = 0.0
     var height = 0.0
     var i = 0
-    while i < node.childCount {
-        let child = tree.nodes[node.firstChild + i]
-        let childWidth = outerWidth(node: child)
-        let childHeight = outerHeight(node: child)
-        if node.axisCode == 1 {
+    while i < childCount {
+        let childIndex = firstChild + i
+        let childWidth = outerWidth(node: tree.nodes[childIndex])
+        let childHeight = outerHeight(node: tree.nodes[childIndex])
+        if axisCode == 1 {
             width = width + childWidth
             height = height > childHeight ? height : childHeight
         } else {
@@ -74,25 +86,26 @@ function layoutEngineComputeStackContentSize(tree: borrow LayoutTree, index: Int
         }
         i = i + 1
     }
-    if node.childCount > 1 {
-        if node.axisCode == 1 {
-            width = width + repeatedSpacing(count: node.childCount, spacing: node.spacing)
+    if childCount > 1 {
+        if axisCode == 1 {
+            width = width + repeatedSpacing(count: childCount, spacing: spacing)
         } else {
-            height = height + repeatedSpacing(count: node.childCount, spacing: node.spacing)
+            height = height + repeatedSpacing(count: childCount, spacing: spacing)
         }
     }
     return Size(width: width, height: height)
 }
 
 function layoutEngineComputeAbsoluteContentSize(tree: borrow LayoutTree, index: Int) -> Size {
-    let node = tree.nodes[index]
+    let childCount = tree.nodes[index].childCount
+    let firstChild = tree.nodes[index].firstChild
     var width = 0.0
     var height = 0.0
     var i = 0
-    while i < node.childCount {
-        let child = tree.nodes[node.firstChild + i]
-        let childWidth = child.dx + outerWidth(node: child)
-        let childHeight = child.dy + outerHeight(node: child)
+    while i < childCount {
+        let childIndex = firstChild + i
+        let childWidth = outerRight(node: tree.nodes[childIndex])
+        let childHeight = outerBottom(node: tree.nodes[childIndex])
         width = width > childWidth ? width : childWidth
         height = height > childHeight ? height : childHeight
         i = i + 1
@@ -101,14 +114,15 @@ function layoutEngineComputeAbsoluteContentSize(tree: borrow LayoutTree, index: 
 }
 
 function layoutEngineComputeOverlayContentSize(tree: borrow LayoutTree, index: Int) -> Size {
-    let node = tree.nodes[index]
+    let childCount = tree.nodes[index].childCount
+    let firstChild = tree.nodes[index].firstChild
     var width = 0.0
     var height = 0.0
     var i = 0
-    while i < node.childCount {
-        let child = tree.nodes[node.firstChild + i]
-        let childWidth = outerWidth(node: child)
-        let childHeight = outerHeight(node: child)
+    while i < childCount {
+        let childIndex = firstChild + i
+        let childWidth = outerWidth(node: tree.nodes[childIndex])
+        let childHeight = outerHeight(node: tree.nodes[childIndex])
         width = width > childWidth ? width : childWidth
         height = height > childHeight ? height : childHeight
         i = i + 1
@@ -117,53 +131,60 @@ function layoutEngineComputeOverlayContentSize(tree: borrow LayoutTree, index: I
 }
 
 function layoutEngineComputeGridContentSize(tree: borrow LayoutTree, index: Int) -> Size {
-    let node = tree.nodes[index]
-    if node.columns <= 0 {
+    let columns = tree.nodes[index].columns
+    if columns <= 0 {
         return Size(width: 0.0, height: 0.0)
     }
+    let childCount = tree.nodes[index].childCount
+    let firstChild = tree.nodes[index].firstChild
+    let spacing = tree.nodes[index].spacing
+    let rowSpacing = tree.nodes[index].rowSpacing
     var maxCellWidth = 0.0
     var totalHeight = 0.0
     var rowHeight = 0.0
     var i = 0
-    while i < node.childCount {
-        let child = tree.nodes[node.firstChild + i]
-        let childWidth = outerWidth(node: child)
-        let childHeight = outerHeight(node: child)
-        let column = i % node.columns
+    while i < childCount {
+        let childIndex = firstChild + i
+        let childWidth = outerWidth(node: tree.nodes[childIndex])
+        let childHeight = outerHeight(node: tree.nodes[childIndex])
+        let column = i % columns
         maxCellWidth = maxCellWidth > childWidth ? maxCellWidth : childWidth
         rowHeight = rowHeight > childHeight ? rowHeight : childHeight
-        if column == node.columns - 1 || i == node.childCount - 1 {
+        if column == columns - 1 || i == childCount - 1 {
             totalHeight = totalHeight + rowHeight
             rowHeight = 0.0
         }
         i = i + 1
     }
-    let usedColumns = node.childCount < node.columns ? node.childCount : node.columns
+    let usedColumns = childCount < columns ? childCount : columns
     var totalWidth = 0.0
     if usedColumns > 0 {
         totalWidth = maxCellWidth * intAsFloat(value: usedColumns)
-        totalWidth = totalWidth + repeatedSpacing(count: usedColumns, spacing: node.spacing)
+        totalWidth = totalWidth + repeatedSpacing(count: usedColumns, spacing: spacing)
     }
-    let rowCount = node.childCount == 0 ? 0 : ((node.childCount - 1) / node.columns) + 1
-    totalHeight = totalHeight + repeatedSpacing(count: rowCount, spacing: node.rowSpacing)
+    let rowCount = childCount == 0 ? 0 : ((childCount - 1) / columns) + 1
+    totalHeight = totalHeight + repeatedSpacing(count: rowCount, spacing: rowSpacing)
     return Size(width: totalWidth, height: totalHeight)
 }
 
 function layoutEngineComputeWrapContentSize(tree: borrow LayoutTree, index: Int, available: borrow Size) -> Size {
-    let node = tree.nodes[index]
+    let childCount = tree.nodes[index].childCount
+    let firstChild = tree.nodes[index].firstChild
+    let spacing = tree.nodes[index].spacing
+    let rowSpacing = tree.nodes[index].rowSpacing
     var width = 0.0
     var height = 0.0
     var lineWidth = 0.0
     var lineHeight = 0.0
     var i = 0
-    while i < node.childCount {
-        let child = tree.nodes[node.firstChild + i]
-        let childWidth = outerWidth(node: child)
-        let childHeight = outerHeight(node: child)
-        let proposedWidth = lineWidth == 0.0 ? childWidth : lineWidth + node.spacing + childWidth
+    while i < childCount {
+        let childIndex = firstChild + i
+        let childWidth = outerWidth(node: tree.nodes[childIndex])
+        let childHeight = outerHeight(node: tree.nodes[childIndex])
+        let proposedWidth = lineWidth == 0.0 ? childWidth : lineWidth + spacing + childWidth
         if lineWidth > 0.0 && proposedWidth > available.width {
             width = width > lineWidth ? width : lineWidth
-            height = height + lineHeight + node.rowSpacing
+            height = height + lineHeight + rowSpacing
             lineWidth = childWidth
             lineHeight = childHeight
         } else {

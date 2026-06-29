@@ -23,6 +23,18 @@ function outerHeight(node: borrow LayoutNode) -> Float {
     return node.measuredH + node.marT + node.marB
 }
 
+// Absolute-arrange extent helpers: the child's outer size plus its descriptor
+// offset. Kept as `borrow LayoutNode` functions so callers can pass
+// `tree.nodes[i]` directly and let the VM borrow-elide the array read instead of
+// cloning the whole 40-field node just to sum a few scalars.
+function outerRight(node: borrow LayoutNode) -> Float {
+    return node.dx + node.measuredW + node.marL + node.marR
+}
+
+function outerBottom(node: borrow LayoutNode) -> Float {
+    return node.dy + node.measuredH + node.marT + node.marB
+}
+
 function constrainedChildAxisOffer(parentAvailable: Float, kind: Int, value: Float) -> Float {
     if kind == 1 {
         return nonNegative(value: value)
