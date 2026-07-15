@@ -1,3 +1,4 @@
+import Foundation
 /// Layout model - descriptor and flat executable tree.
 struct LayoutDescriptor {
     var width: SizeMode

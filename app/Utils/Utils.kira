@@ -1,3 +1,4 @@
+import Foundation
 /// Utility functions for geometry operations
 function pointDistance(p1: borrow Point, p2: borrow Point) -> Float {
     let dx = p1.x - p2.x

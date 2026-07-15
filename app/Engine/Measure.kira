@@ -1,3 +1,4 @@
+import Foundation
 // Measure-skip predicate. Taking the node by `borrow` lets the caller pass
 // `tree.nodes[index]` directly: the VM borrow-elides the element read (no node
 // clone) and reads all the gate fields through the alias. Cloning the whole
