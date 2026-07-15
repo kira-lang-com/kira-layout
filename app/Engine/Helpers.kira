@@ -1,3 +1,4 @@
+import Foundation
 function layoutEngineResolveSizeMode(kind: Int, value: Float, available: Float, content: Float) -> Float {
     if kind == 1 {
         return nonNegative(value: value)
@@ -60,8 +61,15 @@ function layoutEngineResolvedStackMainSize(kind: Int, current: Float, fillSize: 
     return current
 }
 
-function layoutEngineResolvedStackCrossSize(alignmentCode: Int, current: Float, available: Float, marginTotal: Float) -> Float {
-    if alignmentCode == 4 {
+// Cross-axis size of a stack child. Stretch (alignmentCode 4) sizes every child
+// to the container. A Fill cross child (crossKind 2) also fills the container's
+// resolved cross extent regardless of alignment: "Fill" means fill, and
+// Start/Center/End cannot position something that already occupies the full
+// cross axis. Without this, `VStackFill{...}.width(W)` (Start cross) left its
+// Fill rows at the width they measured against the grandparent — overflowing W,
+// which pushed trailing content (after a Spacer) past the clip and dropped it.
+function layoutEngineResolvedStackCrossSize(alignmentCode: Int, crossKind: Int, current: Float, available: Float, marginTotal: Float) -> Float {
+    if alignmentCode == 4 || crossKind == 2 {
         return nonNegative(value: available - marginTotal)
     }
     return current
