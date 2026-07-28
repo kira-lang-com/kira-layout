@@ -134,10 +134,9 @@ function layoutParentIndices(tree: borrow LayoutTree) -> [Int] {
     }
     i = 0
     while i < tree.nodes.count {
-        let node = tree.nodes[i]
         var c = 0
-        while c < node.childCount {
-            parents[node.firstChild + c] = i
+        while c < tree.nodes[i].childCount {
+            parents[tree.nodes[i].firstChild + c] = i
             c = c + 1
         }
         i = i + 1
@@ -150,37 +149,35 @@ function layoutParentIndices(tree: borrow LayoutTree) -> [Int] {
 /// everything else is marked clean. This is the precise invalidation that lets
 /// the engine skip untouched subtrees -- a change dirties only the path from the
 /// changed node to the root, leaving sibling subtrees reusable.
-function layoutPropagateDirty(tree: LayoutTree, selfChanged: borrow [Bool]) -> LayoutTree {
-    var t = tree
-    let parents = layoutParentIndices(t)
+function layoutPropagateDirty(tree: borrow mut LayoutTree, selfChanged: borrow [Bool]) {
+    let parents = layoutParentIndices(tree)
     var i = 0
-    while i < t.nodes.count {
-        t.nodes[i].subtreeDirty = false
+    while i < tree.nodes.count {
+        tree.nodes[i].subtreeDirty = false
         i = i + 1
     }
     i = 0
-    while i < t.nodes.count {
+    while i < tree.nodes.count {
         if i < selfChanged.count && selfChanged[i] {
             var cur = i
-            while cur != -1 && !t.nodes[cur].subtreeDirty {
-                t.nodes[cur].subtreeDirty = true
+            while cur != -1 && !tree.nodes[cur].subtreeDirty {
+                tree.nodes[cur].subtreeDirty = true
                 cur = parents[cur]
             }
         }
         i = i + 1
     }
-    return t
+    return
 }
 
 /// Mark the entire tree dirty (forces a full recompute on the next pass).
-function layoutMarkAllDirty(tree: LayoutTree) -> LayoutTree {
-    var t = tree
+function layoutMarkAllDirty(tree: borrow mut LayoutTree) {
     var i = 0
-    while i < t.nodes.count {
-        t.nodes[i].subtreeDirty = true
+    while i < tree.nodes.count {
+        tree.nodes[i].subtreeDirty = true
         i = i + 1
     }
-    return t
+    return
 }
 
 /// Mark the entire tree clean. After a full layout every node's cached
@@ -190,14 +187,13 @@ function layoutMarkAllDirty(tree: LayoutTree) -> LayoutTree {
 /// geometry for every subtree whose offer and origin are unchanged. Sound only
 /// when the descriptors did not change (the retained re-layout path, where the
 /// view tree and every descriptor are identical and only the viewport differs).
-function layoutMarkAllClean(tree: LayoutTree) -> LayoutTree {
-    var t = tree
+function layoutMarkAllClean(tree: borrow mut LayoutTree) {
     var i = 0
-    while i < t.nodes.count {
-        t.nodes[i].subtreeDirty = false
+    while i < tree.nodes.count {
+        tree.nodes[i].subtreeDirty = false
         i = i + 1
     }
-    return t
+    return
 }
 
 /// True when two flat trees have identical structure (node count and each
@@ -365,45 +361,50 @@ function layoutNodeOfferIndependent(node: borrow LayoutNode) -> Bool {
     return sizeModeIsFixedKind(kind: node.wKind) && sizeModeIsFixedKind(kind: node.hKind)
 }
 
-function layoutNodeFlattenDescriptor(node: LayoutNode, desc: borrow LayoutDescriptor) -> LayoutNode {
-    var result = node
-    result.wKind = sizeModeKind(desc.width)
-    result.wVal = sizeModeValue(desc.width)
-    result.hKind = sizeModeKind(desc.height)
-    result.hVal = sizeModeValue(desc.height)
-    result.flex = desc.flex
-    result.arrangeCode = arrangeModeCode(desc.arrange)
-    result.axisCode = axisValueCode(desc.axis)
-    result.spacing = desc.spacing
-    result.rowSpacing = desc.rowSpacing
-    result.alignCode = crossAlignmentCode(desc.alignment)
-    result.overlayAlignCode = alignmentValueCode(desc.overlayAlignment)
-    result.columns = desc.columns
-    result.padL = desc.padding.leading
-    result.padT = desc.padding.top
-    result.padR = desc.padding.trailing
-    result.padB = desc.padding.bottom
-    result.marL = desc.margin.leading
-    result.marT = desc.margin.top
-    result.marR = desc.margin.trailing
-    result.marB = desc.margin.bottom
-    result.dx = desc.x
-    result.dy = desc.y
-    result.offerIndependent = layoutNodeOfferIndependent(result)
-    return result
+/// Flatten one descriptor into the node that carries it, in place.
+///
+/// Takes the node by `borrow mut` rather than by value: a `LayoutNode` is
+/// thirty-one fields, and taking it by value copied it into the callee, again
+/// into its `var result`, and a third time on the way back into the array it
+/// came from — three copies to overwrite twenty of its fields, once per node,
+/// every frame.
+function layoutNodeFlattenDescriptor(node: borrow mut LayoutNode, desc: borrow LayoutDescriptor) {
+    node.wKind = sizeModeKind(desc.width)
+    node.wVal = sizeModeValue(desc.width)
+    node.hKind = sizeModeKind(desc.height)
+    node.hVal = sizeModeValue(desc.height)
+    node.flex = desc.flex
+    node.arrangeCode = arrangeModeCode(desc.arrange)
+    node.axisCode = axisValueCode(desc.axis)
+    node.spacing = desc.spacing
+    node.rowSpacing = desc.rowSpacing
+    node.alignCode = crossAlignmentCode(desc.alignment)
+    node.overlayAlignCode = alignmentValueCode(desc.overlayAlignment)
+    node.columns = desc.columns
+    node.padL = desc.padding.leading
+    node.padT = desc.padding.top
+    node.padR = desc.padding.trailing
+    node.padB = desc.padding.bottom
+    node.marL = desc.margin.leading
+    node.marT = desc.margin.top
+    node.marR = desc.margin.trailing
+    node.marB = desc.margin.bottom
+    node.dx = desc.x
+    node.dy = desc.y
+    node.offerIndependent = sizeModeIsFixedKind(kind: node.wKind) && sizeModeIsFixedKind(kind: node.hKind)
+    return
 }
 
 /// Flatten every node's descriptor into its inline scalar fields, reading from
 /// the tree's parallel `descriptors` array. Requires `descriptors` to be
 /// populated and index-aligned with `nodes`.
-function layoutTreeFlattenDescriptors(tree: LayoutTree) -> LayoutTree {
-    var result = tree
+function layoutTreeFlattenDescriptors(tree: borrow mut LayoutTree) {
     var index = 0
-    while index < result.nodes.count {
-        result.nodes[index] = layoutNodeFlattenDescriptor(result.nodes[index], result.descriptors[index])
+    while index < tree.nodes.count {
+        layoutNodeFlattenDescriptor(tree.nodes[index], tree.descriptors[index])
         index = index + 1
     }
-    return result
+    return
 }
 
 function edgeInsetsEqual(a: borrow EdgeInsets, b: borrow EdgeInsets) -> Bool {
