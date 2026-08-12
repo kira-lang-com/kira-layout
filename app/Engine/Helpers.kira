@@ -41,6 +41,27 @@ function layoutEngineSizeModeIsFill(kind: Int) -> Bool {
     return kind == 2
 }
 
+// Whether a size mode resolves from the node's content: Hug, and the two
+// content-versus-value modes (at least / at most).
+function layoutEngineSizeModeUsesContent(kind: Int) -> Bool {
+    return kind == 3 || kind == 5 || kind == 6
+}
+
+// What a child contributes to a content-sized parent on one axis.
+//
+// A child that fills contributes NOTHING to a parent that sizes from its
+// content: "fill the parent" cannot also mean "make the parent bigger", and
+// resolving it as the offered size makes a hugging parent as large as whatever
+// was offered to it. The child is resolved against the parent's final size in
+// the placement pass instead — the main axis from the leftover space, the cross
+// axis from the container — so it still fills exactly what it was asked to.
+function layoutEngineContentExtent(childOuter: Float, childKind: Int, parentUsesContent: Bool) -> Float {
+    if parentUsesContent && layoutEngineSizeModeIsFill(kind: childKind) {
+        return 0.0
+    }
+    return childOuter
+}
+
 function layoutEngineComputeCrossOffset(childSize: Float, available: Float, alignmentCode: Int) -> Float {
     if alignmentCode == 1 {
         return 0.0

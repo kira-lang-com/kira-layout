@@ -1,0 +1,10 @@
+// The layout engine's test suite, in the Foundation `Test`-construct shape.
+//
+// Every case builds a real tree, runs the two passes over it, and reads the
+// frames back — the same path a host draws from. Run with:
+//
+//   kira test --backend vm tests/layout_kik
+//   kira test --backend llvm tests/layout_kik
+//
+// Both backends must agree: the engine is ordinary Kira, and a geometry that
+// differs between interpreting and compiling is a bug in one of them.

@@ -248,6 +248,17 @@ function layoutEnginePlaceFill(tree: borrow mut LayoutTree, index: Int, origin: 
     return
 }
 
+// An overlay child that fills is resolved against the container's OWN size here,
+// the same way a stack resolves its cross axis. It contributed nothing to a
+// content-sized container's measurement, so this is where it learns how large
+// "fill" turned out to be.
+function layoutEngineOverlayChildExtent(kind: Int, current: Float, available: Float, marginTotal: Float) -> Float {
+    if layoutEngineSizeModeIsFill(kind: kind) {
+        return nonNegative(value: available - marginTotal)
+    }
+    return current
+}
+
 function layoutEnginePlaceOverlay(tree: borrow mut LayoutTree, index: Int, origin: borrow Point, available: borrow Size) {
     var result = tree
     let childCount = result.nodes[index].childCount
@@ -258,6 +269,11 @@ function layoutEnginePlaceOverlay(tree: borrow mut LayoutTree, index: Int, origi
         let childIndex = firstChild + i
         let childMarL = result.nodes[childIndex].marL
         let childMarT = result.nodes[childIndex].marT
+        let childMarR = result.nodes[childIndex].marR
+        let childMarB = result.nodes[childIndex].marB
+        let childWidth = layoutEngineOverlayChildExtent(kind: result.nodes[childIndex].wKind, current: result.nodes[childIndex].measuredW, available: available.width, marginTotal: childMarL + childMarR)
+        let childHeight = layoutEngineOverlayChildExtent(kind: result.nodes[childIndex].hKind, current: result.nodes[childIndex].measuredH, available: available.height, marginTotal: childMarT + childMarB)
+        layoutEngineRemeasurePlacedChild(tree: result, childIndex: childIndex, width: childWidth, height: childHeight)
         let outer = Size(width: outerWidth(node: result.nodes[childIndex]), height: outerHeight(node: result.nodes[childIndex]))
         let outerOrigin = layoutEngineAlignedOrigin(child: outer, container: available, origin: origin, alignmentCode: overlayAlignCode)
         layoutEnginePlace(tree: result, index: childIndex, origin: Point(x: outerOrigin.x + childMarL, y: outerOrigin.y + childMarT))

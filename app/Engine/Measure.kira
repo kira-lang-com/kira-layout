@@ -71,13 +71,15 @@ function layoutEngineComputeStackContentSize(tree: borrow LayoutTree, index: Int
     let firstChild = tree.nodes[index].firstChild
     let axisCode = tree.nodes[index].axisCode
     let spacing = tree.nodes[index].spacing
+    let usesContentW = layoutEngineSizeModeUsesContent(kind: tree.nodes[index].wKind)
+    let usesContentH = layoutEngineSizeModeUsesContent(kind: tree.nodes[index].hKind)
     var width = 0.0
     var height = 0.0
     var i = 0
     while i < childCount {
         let childIndex = firstChild + i
-        let childWidth = outerWidth(node: tree.nodes[childIndex])
-        let childHeight = outerHeight(node: tree.nodes[childIndex])
+        let childWidth = layoutEngineContentExtent(childOuter: outerWidth(node: tree.nodes[childIndex]), childKind: tree.nodes[childIndex].wKind, parentUsesContent: usesContentW)
+        let childHeight = layoutEngineContentExtent(childOuter: outerHeight(node: tree.nodes[childIndex]), childKind: tree.nodes[childIndex].hKind, parentUsesContent: usesContentH)
         if axisCode == 1 {
             width = width + childWidth
             height = height > childHeight ? height : childHeight
@@ -100,13 +102,15 @@ function layoutEngineComputeStackContentSize(tree: borrow LayoutTree, index: Int
 function layoutEngineComputeAbsoluteContentSize(tree: borrow LayoutTree, index: Int) -> Size {
     let childCount = tree.nodes[index].childCount
     let firstChild = tree.nodes[index].firstChild
+    let usesContentW = layoutEngineSizeModeUsesContent(kind: tree.nodes[index].wKind)
+    let usesContentH = layoutEngineSizeModeUsesContent(kind: tree.nodes[index].hKind)
     var width = 0.0
     var height = 0.0
     var i = 0
     while i < childCount {
         let childIndex = firstChild + i
-        let childWidth = outerRight(node: tree.nodes[childIndex])
-        let childHeight = outerBottom(node: tree.nodes[childIndex])
+        let childWidth = layoutEngineContentExtent(childOuter: outerRight(node: tree.nodes[childIndex]), childKind: tree.nodes[childIndex].wKind, parentUsesContent: usesContentW)
+        let childHeight = layoutEngineContentExtent(childOuter: outerBottom(node: tree.nodes[childIndex]), childKind: tree.nodes[childIndex].hKind, parentUsesContent: usesContentH)
         width = width > childWidth ? width : childWidth
         height = height > childHeight ? height : childHeight
         i = i + 1
@@ -117,13 +121,15 @@ function layoutEngineComputeAbsoluteContentSize(tree: borrow LayoutTree, index: 
 function layoutEngineComputeOverlayContentSize(tree: borrow LayoutTree, index: Int) -> Size {
     let childCount = tree.nodes[index].childCount
     let firstChild = tree.nodes[index].firstChild
+    let usesContentW = layoutEngineSizeModeUsesContent(kind: tree.nodes[index].wKind)
+    let usesContentH = layoutEngineSizeModeUsesContent(kind: tree.nodes[index].hKind)
     var width = 0.0
     var height = 0.0
     var i = 0
     while i < childCount {
         let childIndex = firstChild + i
-        let childWidth = outerWidth(node: tree.nodes[childIndex])
-        let childHeight = outerHeight(node: tree.nodes[childIndex])
+        let childWidth = layoutEngineContentExtent(childOuter: outerWidth(node: tree.nodes[childIndex]), childKind: tree.nodes[childIndex].wKind, parentUsesContent: usesContentW)
+        let childHeight = layoutEngineContentExtent(childOuter: outerHeight(node: tree.nodes[childIndex]), childKind: tree.nodes[childIndex].hKind, parentUsesContent: usesContentH)
         width = width > childWidth ? width : childWidth
         height = height > childHeight ? height : childHeight
         i = i + 1
@@ -140,14 +146,16 @@ function layoutEngineComputeGridContentSize(tree: borrow LayoutTree, index: Int)
     let firstChild = tree.nodes[index].firstChild
     let spacing = tree.nodes[index].spacing
     let rowSpacing = tree.nodes[index].rowSpacing
+    let usesContentW = layoutEngineSizeModeUsesContent(kind: tree.nodes[index].wKind)
+    let usesContentH = layoutEngineSizeModeUsesContent(kind: tree.nodes[index].hKind)
     var maxCellWidth = 0.0
     var totalHeight = 0.0
     var rowHeight = 0.0
     var i = 0
     while i < childCount {
         let childIndex = firstChild + i
-        let childWidth = outerWidth(node: tree.nodes[childIndex])
-        let childHeight = outerHeight(node: tree.nodes[childIndex])
+        let childWidth = layoutEngineContentExtent(childOuter: outerWidth(node: tree.nodes[childIndex]), childKind: tree.nodes[childIndex].wKind, parentUsesContent: usesContentW)
+        let childHeight = layoutEngineContentExtent(childOuter: outerHeight(node: tree.nodes[childIndex]), childKind: tree.nodes[childIndex].hKind, parentUsesContent: usesContentH)
         let column = i % columns
         maxCellWidth = maxCellWidth > childWidth ? maxCellWidth : childWidth
         rowHeight = rowHeight > childHeight ? rowHeight : childHeight
@@ -173,6 +181,8 @@ function layoutEngineComputeWrapContentSize(tree: borrow LayoutTree, index: Int,
     let firstChild = tree.nodes[index].firstChild
     let spacing = tree.nodes[index].spacing
     let rowSpacing = tree.nodes[index].rowSpacing
+    let usesContentW = layoutEngineSizeModeUsesContent(kind: tree.nodes[index].wKind)
+    let usesContentH = layoutEngineSizeModeUsesContent(kind: tree.nodes[index].hKind)
     var width = 0.0
     var height = 0.0
     var lineWidth = 0.0
@@ -180,8 +190,8 @@ function layoutEngineComputeWrapContentSize(tree: borrow LayoutTree, index: Int,
     var i = 0
     while i < childCount {
         let childIndex = firstChild + i
-        let childWidth = outerWidth(node: tree.nodes[childIndex])
-        let childHeight = outerHeight(node: tree.nodes[childIndex])
+        let childWidth = layoutEngineContentExtent(childOuter: outerWidth(node: tree.nodes[childIndex]), childKind: tree.nodes[childIndex].wKind, parentUsesContent: usesContentW)
+        let childHeight = layoutEngineContentExtent(childOuter: outerHeight(node: tree.nodes[childIndex]), childKind: tree.nodes[childIndex].hKind, parentUsesContent: usesContentH)
         let proposedWidth = lineWidth == 0.0 ? childWidth : lineWidth + spacing + childWidth
         if lineWidth > 0.0 && proposedWidth > available.width {
             width = width > lineWidth ? width : lineWidth

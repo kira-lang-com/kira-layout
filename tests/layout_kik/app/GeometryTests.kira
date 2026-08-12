@@ -1,0 +1,44 @@
+import Foundation
+import KiraLayout
+
+// Geometry cases: the rectangle arithmetic every placement decision is made in.
+
+function lykSampleRect() -> Rect {
+    return Rect(x: 10.0, y: 20.0, width: 100.0, height: 60.0)
+}
+
+Test LykRectCenterIsTheMiddleOfTheRect {
+    test {
+        let center = rectCenter(r: lykSampleRect())
+        return center.x == 60.0 && center.y == 50.0
+    }
+    expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
+}
+
+Test LykRectInsetShrinksByBothEdges {
+    test {
+        let inset = rectInset(r: lykSampleRect(), by: EdgeInsets(top: 5.0, trailing: 10.0, bottom: 5.0, leading: 10.0))
+        return inset.x == 20.0 && inset.y == 25.0 && inset.width == 80.0 && inset.height == 50.0
+    }
+    expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
+}
+
+Test LykRectContainsItsOwnCenter {
+    test { return rectContains(r: lykSampleRect(), point: rectCenter(r: lykSampleRect())) }
+    expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
+}
+
+Test LykRectDoesNotContainAPointPastItsEdge {
+    test { return rectContains(r: lykSampleRect(), point: Point(x: 111.0, y: 50.0)) }
+    expect { let e: Result<Bool, TestFailure> = Result.Ok(false); return e }
+}
+
+Test LykOverlappingRectsIntersect {
+    test { return rectIntersects(r: lykSampleRect(), other: Rect(x: 100.0, y: 70.0, width: 40.0, height: 40.0)) }
+    expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
+}
+
+Test LykSeparateRectsDoNotIntersect {
+    test { return rectIntersects(r: lykSampleRect(), other: Rect(x: 200.0, y: 20.0, width: 40.0, height: 40.0)) }
+    expect { let e: Result<Bool, TestFailure> = Result.Ok(false); return e }
+}

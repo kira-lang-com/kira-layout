@@ -1,0 +1,80 @@
+import Foundation
+import KiraLayout
+
+// Sizing cases: what a child that FILLS does to a parent that sizes from its
+// CONTENT, and what it is resolved to afterwards.
+//
+// A filling child asks for whatever the parent turns out to be. Letting it also
+// decide the parent's size makes the answer circular, and the parent comes out
+// as large as whatever was offered to it — a row as tall as the window, with
+// every sibling row pushed off the bottom.
+
+Test LykHugRowKeepsTheHeightOfItsContent {
+    test { return layoutFrame(lykHugRow(), 0).height }
+    expect { let e: Result<Float, TestFailure> = Result.Ok(20.0); return e }
+}
+
+// 300 offered, 60 + 40 spent on the fixed children: the spacer is the rest.
+Test LykHugRowGivesTheLeftoverToTheFillChild {
+    test { return layoutFrame(lykHugRow(), 2).width }
+    expect { let e: Result<Float, TestFailure> = Result.Ok(200.0); return e }
+}
+
+Test LykHugRowKeepsTheTrailingChildInside {
+    test { return layoutFrame(lykHugRow(), 3).x }
+    expect { let e: Result<Float, TestFailure> = Result.Ok(260.0); return e }
+}
+
+// A filling child still fills the cross axis of the row it is in.
+Test LykHugRowFillChildTakesTheRowHeight {
+    test { return layoutFrame(lykHugRow(), 2).height }
+    expect { let e: Result<Float, TestFailure> = Result.Ok(20.0); return e }
+}
+
+Test LykHugColumnKeepsTheWidthOfItsContent {
+    test { return layoutFrame(lykHugColumn(), 0).width }
+    expect { let e: Result<Float, TestFailure> = Result.Ok(60.0); return e }
+}
+
+// 800 offered, 20 + 24 spent: the spacer is the rest, and the trailing child
+// therefore sits on the bottom edge.
+Test LykHugColumnGivesTheLeftoverToTheFillChild {
+    test { return layoutFrame(lykHugColumn(), 2).height }
+    expect { let e: Result<Float, TestFailure> = Result.Ok(756.0); return e }
+}
+
+Test LykHugColumnPlacesTheTrailingChildLast {
+    test { return layoutFrame(lykHugColumn(), 3).y }
+    expect { let e: Result<Float, TestFailure> = Result.Ok(776.0); return e }
+}
+
+Test LykHugOverlayTakesTheSizeOfItsFixedChild {
+    test {
+        let frame = layoutFrame(lykHugOverlay(), 0)
+        return frame.width == 40.0 && frame.height == 20.0
+    }
+    expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
+}
+
+// The wash behind a row covers the row, and no more.
+Test LykHugOverlayResolvesTheFillChildToTheContainer {
+    test {
+        let laid = lykHugOverlay()
+        return lykFramesEqual(layoutFrame(laid, 1), layoutFrame(laid, 2))
+    }
+    expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
+}
+
+Test LykSplitPlacesTheFixedSidebar {
+    test {
+        return lykFramesEqual(layoutFrame(lykSplit(), 1), Rect(x: 40.0, y: 40.0, width: 250.0, height: 640.0))
+    }
+    expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
+}
+
+Test LykSplitGivesTheRestToTheFillingContent {
+    test {
+        return lykFramesEqual(layoutFrame(lykSplit(), 2), Rect(x: 330.0, y: 40.0, width: 910.0, height: 640.0))
+    }
+    expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
+}

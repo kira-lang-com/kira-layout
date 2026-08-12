@@ -31,11 +31,11 @@ app/
 
 ```bash
 kira check
-cd examples/small-layout-test
-kira run
+kira test --backend vm tests/layout_kik
+kira test --backend llvm tests/layout_kik
 ```
 
-The example demonstrates geometry utilities and a real layout tree that runs through measurement and placement.
+The suite lays out real trees and reads the resulting frames back, on both backends.
 
 ## Core Types
 
@@ -59,34 +59,11 @@ struct LayoutEngine {
 
 `measure` and `place` return updated trees. This matches Kira's current value-oriented execution model and avoids relying on reference mutation for nested nodes.
 
-## Example Output
-
-```text
-=====================================
-  KIRA LAYOUT ENGINE - DEMO
-=====================================
-
-[ GEOMETRY ]
--------------------------------------
-  Rect center and inset computed
-  Geometry: ok
-
-[ LAYOUT ENGINE ]
--------------------------------------
-  Root fixed size: 240 x 160
-  Measured size computed
-  Stack, padding, margins, stretch, overlay all executed
-  Measurement: ok
-
-=====================================
-  All demos completed successfully!
-=====================================
-```
-
 ## Implementation Notes
 
 - `SizeMode.Fixed` and `SizeMode.Fill` resolve as outer sizes.
 - `SizeMode.Hug`, `Min`, and `Max` include content plus padding.
+- A child that fills contributes nothing to a parent that sizes from its content: it is resolved against the parent's final size during placement, from the leftover main-axis space or from the container on the cross axis.
 - Stack, Absolute, Grid, Wrap, Overlay, and Fill are implemented in both measure and place.
 - The tree is flat (`LayoutTree.nodes` plus `firstChild` / `childCount`) because current executable Kira does not accept empty array literals for leaf child lists.
 - Integer-to-float layout math goes through the `intAsFloat` helper, now a single `Float(...)` numeric cast (the compiler gained `Int(...)`/`Float(...)` casts).
