@@ -11,6 +11,11 @@ struct LayoutDescriptor {
     var alignment: CrossAlignment
     var overlayAlignment: Alignment
     var columns: Int = 1
+    // Where this node's baseline sits, measured down from its own top edge. A
+    // run of text reports the line it is written on; everything else leaves it
+    // at zero and is aligned by its bottom edge, which is where a glyph or a
+    // control beside a word belongs.
+    var baseline: Float = 0.0
     var padding: EdgeInsets
     var margin: EdgeInsets
     var x: Float = 0.0
@@ -42,6 +47,9 @@ struct LayoutNode {
     var alignCode: Int = 0
     var overlayAlignCode: Int = 0
     var columns: Int = 0
+    // The baseline this node reports, from its top edge. Zero means it has none
+    // and aligns by its bottom edge.
+    var baseline: Float = 0.0
     var padL: Float = 0.0
     var padT: Float = 0.0
     var padR: Float = 0.0
@@ -332,7 +340,13 @@ function crossAlignmentCode(alignment: borrow CrossAlignment) -> Int {
         Center -> return 2;
         End -> return 3;
         Stretch -> return 4;
+        Baseline -> return 5;
     }
+}
+
+// A stack that lines its children up on their baselines.
+function crossAlignmentIsBaseline(code: Int) -> Bool {
+    return code == 5
 }
 
 function alignmentValueCode(alignment: borrow Alignment) -> Int {
@@ -381,6 +395,7 @@ function layoutNodeFlattenDescriptor(node: borrow mut LayoutNode, desc: borrow L
     node.alignCode = crossAlignmentCode(desc.alignment)
     node.overlayAlignCode = alignmentValueCode(desc.overlayAlignment)
     node.columns = desc.columns
+    node.baseline = desc.baseline
     node.padL = desc.padding.leading
     node.padT = desc.padding.top
     node.padR = desc.padding.trailing

@@ -8,3 +8,7 @@
 //
 // Both backends must agree: the engine is ordinary Kira, and a geometry that
 // differs between interpreting and compiling is a bug in one of them.
+//
+// The runner expands into this file, so what it calls has to be in scope here.
+import Foundation
+import KiraLayout

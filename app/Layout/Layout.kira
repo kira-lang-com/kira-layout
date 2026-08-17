@@ -9,6 +9,11 @@ enum CrossAlignment {
     Center
     End
     Stretch
+    // Children of a horizontal stack line up on the BASELINE each one reports
+    // rather than on an edge or a centre. A run of text reports where its
+    // letters sit; anything else reports its bottom edge, which is what a glyph
+    // or a control standing beside a word aligns to.
+    Baseline
 }
 
 enum Alignment {

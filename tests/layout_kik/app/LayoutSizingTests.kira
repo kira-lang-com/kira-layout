@@ -14,6 +14,32 @@ Test LykHugRowKeepsTheHeightOfItsContent {
     expect { let e: Result<Float, TestFailure> = Result.Ok(20.0); return e }
 }
 
+// Three fixed children in a row wide enough to hold them: each keeps the width
+// it asked for, and each begins after the one before it ends. A child narrower
+// than what it draws is a row drawn on top of itself.
+Test LykFixedTrioKeepsEachChildAtItsWidth {
+    test { return layoutFrame(lykFixedTrio(400.0), 2).width }
+    expect { let e: Result<Float, TestFailure> = Result.Ok(108.0); return e }
+}
+
+Test LykFixedTrioStartsEachChildAfterTheLast {
+    test {
+        let tree = lykFixedTrio(400.0)
+        return layoutFrame(tree, 2).x - lykFrameRight(tree, 1)
+    }
+    expect { let e: Result<Float, TestFailure> = Result.Ok(8.0); return e }
+}
+
+// The same row in a column too narrow for it: the children give up the space
+// between them, and the last one still ends inside the row rather than past it.
+Test LykFixedTrioKeepsTheTrailingChildInsideANarrowRow {
+    test {
+        let tree = lykFixedTrio(300.0)
+        return lykFrameRight(tree, 3) <= 300.0
+    }
+    expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
+}
+
 // 300 offered, 60 + 40 spent on the fixed children: the spacer is the rest.
 Test LykHugRowGivesTheLeftoverToTheFillChild {
     test { return layoutFrame(lykHugRow(), 2).width }

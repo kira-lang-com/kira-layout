@@ -93,6 +93,14 @@ function layoutEngineResolvedStackCrossSize(alignmentCode: Int, crossKind: Int, 
     if alignmentCode == 4 || crossKind == 2 {
         return nonNegative(value: available - marginTotal)
     }
+    // A child taller than the row it sits on (or wider than its column) is
+    // bounded by the container: centring it would hang it across both edges,
+    // over whatever is beside the stack. The container's extent is the one the
+    // program stated, so it is the one that governs.
+    let bound = nonNegative(value: available - marginTotal)
+    if available > 0.0 && current > bound {
+        return bound
+    }
     return current
 }
 
