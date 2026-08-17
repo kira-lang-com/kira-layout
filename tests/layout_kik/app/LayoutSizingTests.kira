@@ -104,3 +104,34 @@ Test LykSplitGivesTheRestToTheFillingContent {
     }
     expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
 }
+
+// --- Baseline rows -----------------------------------------------------------
+//
+// Children hang from one line. The deepest baseline in the row is where that
+// line falls (18 here), and every other child is dropped by the difference — so
+// a smaller run of text and a glyph beside a heading sit ON the heading's line
+// rather than in the middle of the row.
+
+Test LykBaselineRowLeavesTheDeepestChildAtTheTop {
+    test { return layoutFrame(lykBaselineRow(), 1).y }
+    expect { let e: Result<Float, TestFailure> = Result.Ok(0.0); return e }
+}
+
+Test LykBaselineRowDropsTheSmallerRunOntoTheLine {
+    test { return layoutFrame(lykBaselineRow(), 2).y }
+    expect { let e: Result<Float, TestFailure> = Result.Ok(6.0); return e }
+}
+
+Test LykBaselineRowDropsTheGlyphOntoTheLine {
+    test { return layoutFrame(lykBaselineRow(), 3).y }
+    expect { let e: Result<Float, TestFailure> = Result.Ok(4.0); return e }
+}
+
+// The row is the line plus the longest drop below it — 18 + 6, not the tallest
+// child. A FILLING child says nothing about where the line falls: it is as tall
+// as whatever the row becomes, and letting it speak would drag the line to the
+// row's bottom and take every word down with it.
+Test LykBaselineRowIsTheLinePlusTheDeepestDrop {
+    test { return layoutFrame(lykBaselineRow(), 0).height }
+    expect { let e: Result<Float, TestFailure> = Result.Ok(24.0); return e }
+}

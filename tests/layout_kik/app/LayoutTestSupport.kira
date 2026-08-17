@@ -221,3 +221,47 @@ function lykRetainedTree() -> LayoutTree {
         lykFixedLeaf(width: 30.0, height: 20.0)
     ])
 }
+
+// A baseline row: a big run of text, a small one, a glyph beside them, and a
+// spacer between — the shape a window's toolbar and every form row has.
+//
+// Baselines are the fourth argument to the leaf: the big run sits 18 down from
+// its own top, the small one 12, and the glyph asks to sit 14 down. The spacer
+// has none, and asks for the whole row's height.
+function lykBaselineLeaf(width: Float, height: Float, baseline: Float) -> LayoutNode {
+    return lykNode(
+        firstChild: 0,
+        childCount: 0,
+        desc: LayoutDescriptor(
+            width: SizeMode.Fixed(width),
+            height: SizeMode.Fixed(height),
+            arrange: ArrangeMode.Fill,
+            axis: Axis.Vertical,
+            alignment: CrossAlignment.Stretch,
+            overlayAlignment: Alignment.Center,
+            baseline: baseline,
+            padding: lykNoInsets(),
+            margin: lykNoInsets()
+        )
+    )
+}
+
+function lykBaselineRow() -> LayoutTree {
+    var tree = LayoutTree(nodes: [
+        lykStack(
+            width: SizeMode.Fill,
+            height: SizeMode.Hug,
+            axis: Axis.Horizontal,
+            alignment: CrossAlignment.Baseline,
+            spacing: 0.0,
+            padding: lykNoInsets(),
+            firstChild: 1,
+            childCount: 4
+        ),
+        lykBaselineLeaf(width: 60.0, height: 24.0, baseline: 18.0),
+        lykBaselineLeaf(width: 40.0, height: 16.0, baseline: 12.0),
+        lykBaselineLeaf(width: 20.0, height: 20.0, baseline: 14.0),
+        lykFillLeaf()
+    ])
+    return lykLayout(tree: move tree, available: Size(width: 300.0, height: 800.0))
+}
