@@ -172,11 +172,9 @@ function layoutPropagateDirty(tree: borrow mut LayoutTree, selfChanged: borrow [
 
 /// Mark the entire tree dirty (forces a full recompute on the next pass).
 function layoutMarkAllDirty(tree: borrow mut LayoutTree) {
-    var i = 0
-    while i < tree.nodes.count {
+        for i in 0..tree.nodes.count {
         tree.nodes[i].subtreeDirty = true
-        i = i + 1
-    }
+            }
     return
 }
 
@@ -188,11 +186,9 @@ function layoutMarkAllDirty(tree: borrow mut LayoutTree) {
 /// when the descriptors did not change (the retained re-layout path, where the
 /// view tree and every descriptor are identical and only the viewport differs).
 function layoutMarkAllClean(tree: borrow mut LayoutTree) {
-    var i = 0
-    while i < tree.nodes.count {
+        for i in 0..tree.nodes.count {
         tree.nodes[i].subtreeDirty = false
-        i = i + 1
-    }
+            }
     return
 }
 
@@ -203,13 +199,11 @@ function layoutStructureMatches(a: borrow LayoutTree, b: borrow LayoutTree) -> B
     if a.nodes.count != b.nodes.count {
         return false
     }
-    var i = 0
-    while i < a.nodes.count {
+        for i in 0..a.nodes.count {
         if a.nodes[i].firstChild != b.nodes[i].firstChild || a.nodes[i].childCount != b.nodes[i].childCount {
             return false
         }
-        i = i + 1
-    }
+            }
     return true
 }
 
@@ -399,11 +393,9 @@ function layoutNodeFlattenDescriptor(node: borrow mut LayoutNode, desc: borrow L
 /// the tree's parallel `descriptors` array. Requires `descriptors` to be
 /// populated and index-aligned with `nodes`.
 function layoutTreeFlattenDescriptors(tree: borrow mut LayoutTree) {
-    var index = 0
-    while index < tree.nodes.count {
+        for index in 0..tree.nodes.count {
         layoutNodeFlattenDescriptor(tree.nodes[index], tree.descriptors[index])
-        index = index + 1
-    }
+            }
     return
 }
 
