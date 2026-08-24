@@ -7,7 +7,7 @@ function lykSampleRect() -> Rect {
     return Rect(x: 10.0, y: 20.0, width: 100.0, height: 60.0)
 }
 
-Test LykRectCenterIsTheMiddleOfTheRect {
+construct LykRectCenterIsTheMiddleOfTheRect() extends Test {
     test {
         let center = rectCenter(r: lykSampleRect())
         return center.x == 60.0 && center.y == 50.0
@@ -15,7 +15,7 @@ Test LykRectCenterIsTheMiddleOfTheRect {
     expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
 }
 
-Test LykRectInsetShrinksByBothEdges {
+construct LykRectInsetShrinksByBothEdges() extends Test {
     test {
         let inset = rectInset(r: lykSampleRect(), by: EdgeInsets(top: 5.0, trailing: 10.0, bottom: 5.0, leading: 10.0))
         return inset.x == 20.0 && inset.y == 25.0 && inset.width == 80.0 && inset.height == 50.0
@@ -23,22 +23,22 @@ Test LykRectInsetShrinksByBothEdges {
     expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
 }
 
-Test LykRectContainsItsOwnCenter {
+construct LykRectContainsItsOwnCenter() extends Test {
     test { return rectContains(r: lykSampleRect(), point: rectCenter(r: lykSampleRect())) }
     expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
 }
 
-Test LykRectDoesNotContainAPointPastItsEdge {
+construct LykRectDoesNotContainAPointPastItsEdge() extends Test {
     test { return rectContains(r: lykSampleRect(), point: Point(x: 111.0, y: 50.0)) }
     expect { let e: Result<Bool, TestFailure> = Result.Ok(false); return e }
 }
 
-Test LykOverlappingRectsIntersect {
+construct LykOverlappingRectsIntersect() extends Test {
     test { return rectIntersects(r: lykSampleRect(), other: Rect(x: 100.0, y: 70.0, width: 40.0, height: 40.0)) }
     expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
 }
 
-Test LykSeparateRectsDoNotIntersect {
+construct LykSeparateRectsDoNotIntersect() extends Test {
     test { return rectIntersects(r: lykSampleRect(), other: Rect(x: 200.0, y: 20.0, width: 40.0, height: 40.0)) }
     expect { let e: Result<Bool, TestFailure> = Result.Ok(false); return e }
 }

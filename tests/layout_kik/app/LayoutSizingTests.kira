@@ -9,7 +9,7 @@ import KiraLayout
 // as large as whatever was offered to it — a row as tall as the window, with
 // every sibling row pushed off the bottom.
 
-Test LykHugRowKeepsTheHeightOfItsContent {
+construct LykHugRowKeepsTheHeightOfItsContent() extends Test {
     test { return layoutFrame(lykHugRow(), 0).height }
     expect { let e: Result<Float, TestFailure> = Result.Ok(20.0); return e }
 }
@@ -17,12 +17,12 @@ Test LykHugRowKeepsTheHeightOfItsContent {
 // Three fixed children in a row wide enough to hold them: each keeps the width
 // it asked for, and each begins after the one before it ends. A child narrower
 // than what it draws is a row drawn on top of itself.
-Test LykFixedTrioKeepsEachChildAtItsWidth {
+construct LykFixedTrioKeepsEachChildAtItsWidth() extends Test {
     test { return layoutFrame(lykFixedTrio(400.0), 2).width }
     expect { let e: Result<Float, TestFailure> = Result.Ok(108.0); return e }
 }
 
-Test LykFixedTrioStartsEachChildAfterTheLast {
+construct LykFixedTrioStartsEachChildAfterTheLast() extends Test {
     test {
         let tree = lykFixedTrio(400.0)
         return layoutFrame(tree, 2).x - lykFrameRight(tree, 1)
@@ -32,7 +32,7 @@ Test LykFixedTrioStartsEachChildAfterTheLast {
 
 // The same row in a column too narrow for it: the children give up the space
 // between them, and the last one still ends inside the row rather than past it.
-Test LykFixedTrioKeepsTheTrailingChildInsideANarrowRow {
+construct LykFixedTrioKeepsTheTrailingChildInsideANarrowRow() extends Test {
     test {
         let tree = lykFixedTrio(300.0)
         return lykFrameRight(tree, 3) <= 300.0
@@ -41,40 +41,40 @@ Test LykFixedTrioKeepsTheTrailingChildInsideANarrowRow {
 }
 
 // 300 offered, 60 + 40 spent on the fixed children: the spacer is the rest.
-Test LykHugRowGivesTheLeftoverToTheFillChild {
+construct LykHugRowGivesTheLeftoverToTheFillChild() extends Test {
     test { return layoutFrame(lykHugRow(), 2).width }
     expect { let e: Result<Float, TestFailure> = Result.Ok(200.0); return e }
 }
 
-Test LykHugRowKeepsTheTrailingChildInside {
+construct LykHugRowKeepsTheTrailingChildInside() extends Test {
     test { return layoutFrame(lykHugRow(), 3).x }
     expect { let e: Result<Float, TestFailure> = Result.Ok(260.0); return e }
 }
 
 // A filling child still fills the cross axis of the row it is in.
-Test LykHugRowFillChildTakesTheRowHeight {
+construct LykHugRowFillChildTakesTheRowHeight() extends Test {
     test { return layoutFrame(lykHugRow(), 2).height }
     expect { let e: Result<Float, TestFailure> = Result.Ok(20.0); return e }
 }
 
-Test LykHugColumnKeepsTheWidthOfItsContent {
+construct LykHugColumnKeepsTheWidthOfItsContent() extends Test {
     test { return layoutFrame(lykHugColumn(), 0).width }
     expect { let e: Result<Float, TestFailure> = Result.Ok(60.0); return e }
 }
 
 // 800 offered, 20 + 24 spent: the spacer is the rest, and the trailing child
 // therefore sits on the bottom edge.
-Test LykHugColumnGivesTheLeftoverToTheFillChild {
+construct LykHugColumnGivesTheLeftoverToTheFillChild() extends Test {
     test { return layoutFrame(lykHugColumn(), 2).height }
     expect { let e: Result<Float, TestFailure> = Result.Ok(756.0); return e }
 }
 
-Test LykHugColumnPlacesTheTrailingChildLast {
+construct LykHugColumnPlacesTheTrailingChildLast() extends Test {
     test { return layoutFrame(lykHugColumn(), 3).y }
     expect { let e: Result<Float, TestFailure> = Result.Ok(776.0); return e }
 }
 
-Test LykHugOverlayTakesTheSizeOfItsFixedChild {
+construct LykHugOverlayTakesTheSizeOfItsFixedChild() extends Test {
     test {
         let frame = layoutFrame(lykHugOverlay(), 0)
         return frame.width == 40.0 && frame.height == 20.0
@@ -83,7 +83,7 @@ Test LykHugOverlayTakesTheSizeOfItsFixedChild {
 }
 
 // The wash behind a row covers the row, and no more.
-Test LykHugOverlayResolvesTheFillChildToTheContainer {
+construct LykHugOverlayResolvesTheFillChildToTheContainer() extends Test {
     test {
         let laid = lykHugOverlay()
         return lykFramesEqual(layoutFrame(laid, 1), layoutFrame(laid, 2))
@@ -91,14 +91,14 @@ Test LykHugOverlayResolvesTheFillChildToTheContainer {
     expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
 }
 
-Test LykSplitPlacesTheFixedSidebar {
+construct LykSplitPlacesTheFixedSidebar() extends Test {
     test {
         return lykFramesEqual(layoutFrame(lykSplit(), 1), Rect(x: 40.0, y: 40.0, width: 250.0, height: 640.0))
     }
     expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
 }
 
-Test LykSplitGivesTheRestToTheFillingContent {
+construct LykSplitGivesTheRestToTheFillingContent() extends Test {
     test {
         return lykFramesEqual(layoutFrame(lykSplit(), 2), Rect(x: 330.0, y: 40.0, width: 910.0, height: 640.0))
     }
@@ -112,17 +112,17 @@ Test LykSplitGivesTheRestToTheFillingContent {
 // a smaller run of text and a glyph beside a heading sit ON the heading's line
 // rather than in the middle of the row.
 
-Test LykBaselineRowLeavesTheDeepestChildAtTheTop {
+construct LykBaselineRowLeavesTheDeepestChildAtTheTop() extends Test {
     test { return layoutFrame(lykBaselineRow(), 1).y }
     expect { let e: Result<Float, TestFailure> = Result.Ok(0.0); return e }
 }
 
-Test LykBaselineRowDropsTheSmallerRunOntoTheLine {
+construct LykBaselineRowDropsTheSmallerRunOntoTheLine() extends Test {
     test { return layoutFrame(lykBaselineRow(), 2).y }
     expect { let e: Result<Float, TestFailure> = Result.Ok(6.0); return e }
 }
 
-Test LykBaselineRowDropsTheGlyphOntoTheLine {
+construct LykBaselineRowDropsTheGlyphOntoTheLine() extends Test {
     test { return layoutFrame(lykBaselineRow(), 3).y }
     expect { let e: Result<Float, TestFailure> = Result.Ok(4.0); return e }
 }
@@ -131,7 +131,7 @@ Test LykBaselineRowDropsTheGlyphOntoTheLine {
 // child. A FILLING child says nothing about where the line falls: it is as tall
 // as whatever the row becomes, and letting it speak would drag the line to the
 // row's bottom and take every word down with it.
-Test LykBaselineRowIsTheLinePlusTheDeepestDrop {
+construct LykBaselineRowIsTheLinePlusTheDeepestDrop() extends Test {
     test { return layoutFrame(lykBaselineRow(), 0).height }
     expect { let e: Result<Float, TestFailure> = Result.Ok(24.0); return e }
 }

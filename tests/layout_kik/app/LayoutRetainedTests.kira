@@ -44,7 +44,7 @@ function lykRetainedRun(changeLeaf: Bool) -> LykRetainedRun {
     )
 }
 
-Test LykUnchangedPassRecomputesNothing {
+construct LykUnchangedPassRecomputesNothing() extends Test {
     test {
         let run = lykRetainedRun(changeLeaf: false)
         return run.measureComputes == 0 && run.placeComputes == 0
@@ -52,7 +52,7 @@ Test LykUnchangedPassRecomputesNothing {
     expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
 }
 
-Test LykUnchangedPassReusesEverySubtree {
+construct LykUnchangedPassReusesEverySubtree() extends Test {
     test {
         let run = lykRetainedRun(changeLeaf: false)
         return run.measureSkips > 0 && run.placeSkips > 0
@@ -60,17 +60,17 @@ Test LykUnchangedPassReusesEverySubtree {
     expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
 }
 
-Test LykChangedLeafTakesItsNewSize {
+construct LykChangedLeafTakesItsNewSize() extends Test {
     test { return lykRetainedRun(changeLeaf: true).changedWidth }
     expect { let e: Result<Float, TestFailure> = Result.Ok(40.0); return e }
 }
 
-Test LykChangedLeafLeavesTheSiblingSubtreeWhereItWas {
+construct LykChangedLeafLeavesTheSiblingSubtreeWhereItWas() extends Test {
     test { return lykRetainedRun(changeLeaf: true).siblingReused }
     expect { let e: Result<Bool, TestFailure> = Result.Ok(true); return e }
 }
 
-Test LykChangedLeafStillReusesTheUntouchedSubtrees {
+construct LykChangedLeafStillReusesTheUntouchedSubtrees() extends Test {
     test {
         let run = lykRetainedRun(changeLeaf: true)
         return run.measureSkips > 0 && run.placeSkips > 0
