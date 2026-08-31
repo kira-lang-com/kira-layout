@@ -15,6 +15,9 @@ function layoutEngineResolveSizeMode(kind: Int, value: Float, available: Float, 
     if kind == 5 {
         return content > value ? content : value
     }
+    if kind == 7 {
+        return nonNegative(value: content * value)
+    }
     return content < value ? content : value
 }
 
@@ -34,6 +37,9 @@ function layoutEngineResolveOuterSize(kind: Int, value: Float, available: Float,
     if kind == 5 {
         return content + padding > value ? content + padding : value
     }
+    if kind == 7 {
+        return nonNegative(value: (content + padding) * value)
+    }
     return content + padding < value ? content + padding : value
 }
 
@@ -44,7 +50,7 @@ function layoutEngineSizeModeIsFill(kind: Int) -> Bool {
 // Whether a size mode resolves from the node's content: Hug, and the two
 // content-versus-value modes (at least / at most).
 function layoutEngineSizeModeUsesContent(kind: Int) -> Bool {
-    return kind == 3 || kind == 5 || kind == 6
+    return kind == 3 || kind == 5 || kind == 6 || kind == 7
 }
 
 // What a child contributes to a content-sized parent on one axis.
