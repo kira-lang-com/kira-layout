@@ -35,6 +35,19 @@ enum SizeMode {
     Fraction(Float)
     Min(Float)
     Max(Float)
+    // Hug the content, then take this fraction of it.
+    //
+    // A drawer, a disclosure, a submenu growing out of the row that owns it.
+    // The content is MEASURED at its natural size and the node's own extent is
+    // the fraction — so the children inside are laid out full size and are
+    // progressively uncovered, rather than being squashed toward zero. What
+    // hides the remainder is the node's own clip.
+    //
+    // This is a size mode rather than arithmetic at the call site because only
+    // layout knows what the content came to. A caller that multiplies a row
+    // height by a child count is guessing, and guesses wrong the moment one row
+    // is taller than the others.
+    Reveal(Float)
 }
 
 enum ArrangeMode {

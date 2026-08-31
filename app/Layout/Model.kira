@@ -221,69 +221,18 @@ function layoutStructureMatches(a: borrow LayoutTree, b: borrow LayoutTree) -> B
     return true
 }
 
+// Two size modes are the same mode carrying the same number.
+//
+// Through the kind and the value rather than a variant-by-variant match: the
+// pairwise form restates every mode against every other, so a seventh mode is
+// not one arm but thirteen — and the arms it is easiest to forget are the ones
+// that silently answer `false` for a mode against ITSELF, which reads as a node
+// whose size never compares equal and so relayouts on every frame.
 function sizeModeEqual(a: SizeMode, b: SizeMode) -> Bool {
-    match a {
-        Fixed(av) -> {
-            match b {
-                Fixed(bv) -> return av == bv;
-                Fill -> return false;
-                Hug -> return false;
-                Fraction(bv) -> return false;
-                Min(bv) -> return false;
-                Max(bv) -> return false;
-            }
-        }
-        Fill -> {
-            match b {
-                Fill -> return true;
-                Fixed(bv) -> return false;
-                Hug -> return false;
-                Fraction(bv) -> return false;
-                Min(bv) -> return false;
-                Max(bv) -> return false;
-            }
-        }
-        Hug -> {
-            match b {
-                Hug -> return true;
-                Fixed(bv) -> return false;
-                Fill -> return false;
-                Fraction(bv) -> return false;
-                Min(bv) -> return false;
-                Max(bv) -> return false;
-            }
-        }
-        Fraction(av) -> {
-            match b {
-                Fraction(bv) -> return av == bv;
-                Fixed(bv) -> return false;
-                Fill -> return false;
-                Hug -> return false;
-                Min(bv) -> return false;
-                Max(bv) -> return false;
-            }
-        }
-        Min(av) -> {
-            match b {
-                Min(bv) -> return av == bv;
-                Fixed(bv) -> return false;
-                Fill -> return false;
-                Hug -> return false;
-                Fraction(bv) -> return false;
-                Max(bv) -> return false;
-            }
-        }
-        Max(av) -> {
-            match b {
-                Max(bv) -> return av == bv;
-                Fixed(bv) -> return false;
-                Fill -> return false;
-                Hug -> return false;
-                Fraction(bv) -> return false;
-                Min(bv) -> return false;
-            }
-        }
+    if sizeModeKind(a) != sizeModeKind(b) {
+        return false
     }
+    return sizeModeValue(a) == sizeModeValue(b)
 }
 
 function sizeModeIsFixed(mode: borrow SizeMode) -> Bool {
@@ -298,6 +247,7 @@ function sizeModeKind(mode: borrow SizeMode) -> Int {
         Fraction(of) -> return 4;
         Min(value) -> return 5;
         Max(value) -> return 6;
+        Reveal(fraction) -> return 7;
     }
 }
 
@@ -309,6 +259,7 @@ function sizeModeValue(mode: borrow SizeMode) -> Float {
         Fraction(of) -> return of;
         Min(value) -> return value;
         Max(value) -> return value;
+        Reveal(fraction) -> return fraction;
     }
 }
 
