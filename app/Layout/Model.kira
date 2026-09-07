@@ -241,25 +241,25 @@ function sizeModeIsFixed(mode: borrow SizeMode) -> Bool {
 
 function sizeModeKind(mode: borrow SizeMode) -> Int {
     match mode {
-        Fixed(value) -> return 1;
-        Fill -> return 2;
-        Hug -> return 3;
-        Fraction(of) -> return 4;
-        Min(value) -> return 5;
-        Max(value) -> return 6;
-        Reveal(fraction) -> return 7;
+        Fixed(value) -> return 1
+        Fill -> return 2
+        Hug -> return 3
+        Fraction(of) -> return 4
+        Min(value) -> return 5
+        Max(value) -> return 6
+        Reveal(fraction) -> return 7
     }
 }
 
 function sizeModeValue(mode: borrow SizeMode) -> Float {
     match mode {
-        Fixed(value) -> return value;
-        Fill -> return 0.0;
-        Hug -> return 0.0;
-        Fraction(of) -> return of;
-        Min(value) -> return value;
-        Max(value) -> return value;
-        Reveal(fraction) -> return fraction;
+        Fixed(value) -> return value
+        Fill -> return 0.0
+        Hug -> return 0.0
+        Fraction(of) -> return of
+        Min(value) -> return value
+        Max(value) -> return value
+        Reveal(fraction) -> return fraction
     }
 }
 
@@ -269,29 +269,29 @@ function sizeModeIsFixedKind(kind: Int) -> Bool {
 
 function arrangeModeCode(arrange: borrow ArrangeMode) -> Int {
     match arrange {
-        Stack -> return 1;
-        Absolute -> return 2;
-        Grid -> return 3;
-        Wrap -> return 4;
-        Overlay -> return 5;
-        Fill -> return 6;
+        Stack -> return 1
+        Absolute -> return 2
+        Grid -> return 3
+        Wrap -> return 4
+        Overlay -> return 5
+        Fill -> return 6
     }
 }
 
 function axisValueCode(axis: borrow Axis) -> Int {
     match axis {
-        Horizontal -> return 1;
-        Vertical -> return 2;
+        Horizontal -> return 1
+        Vertical -> return 2
     }
 }
 
 function crossAlignmentCode(alignment: borrow CrossAlignment) -> Int {
     match alignment {
-        Start -> return 1;
-        Center -> return 2;
-        End -> return 3;
-        Stretch -> return 4;
-        Baseline -> return 5;
+        Start -> return 1
+        Center -> return 2
+        End -> return 3
+        Stretch -> return 4
+        Baseline -> return 5
     }
 }
 
@@ -302,15 +302,15 @@ function crossAlignmentIsBaseline(code: Int) -> Bool {
 
 function alignmentValueCode(alignment: borrow Alignment) -> Int {
     match alignment {
-        TopLeading -> return 1;
-        Top -> return 2;
-        TopTrailing -> return 3;
-        Leading -> return 4;
-        Center -> return 5;
-        Trailing -> return 6;
-        BottomLeading -> return 7;
-        Bottom -> return 8;
-        BottomTrailing -> return 9;
+        TopLeading -> return 1
+        Top -> return 2
+        TopTrailing -> return 3
+        Leading -> return 4
+        Center -> return 5
+        Trailing -> return 6
+        BottomLeading -> return 7
+        Bottom -> return 8
+        BottomTrailing -> return 9
     }
 }
 
