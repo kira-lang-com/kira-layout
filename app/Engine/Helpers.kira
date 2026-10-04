@@ -1,5 +1,5 @@
 import Foundation
-function layoutEngineResolveSizeMode(kind: Int, value: Float, available: Float, content: Float) -> Float {
+public function layoutEngineResolveSizeMode(kind: Int, value: Float, available: Float, content: Float) -> Float {
     if kind == 1 {
         return nonNegative(value: value)
     }
@@ -21,7 +21,7 @@ function layoutEngineResolveSizeMode(kind: Int, value: Float, available: Float, 
     return content < value ? content : value
 }
 
-function layoutEngineResolveOuterSize(kind: Int, value: Float, available: Float, content: Float, padding: Float) -> Float {
+public function layoutEngineResolveOuterSize(kind: Int, value: Float, available: Float, content: Float, padding: Float) -> Float {
     if kind == 1 {
         return nonNegative(value: value)
     }
@@ -43,13 +43,13 @@ function layoutEngineResolveOuterSize(kind: Int, value: Float, available: Float,
     return content + padding < value ? content + padding : value
 }
 
-function layoutEngineSizeModeIsFill(kind: Int) -> Bool {
+public function layoutEngineSizeModeIsFill(kind: Int) -> Bool {
     return kind == 2
 }
 
 // Whether a size mode resolves from the node's content: Hug, and the two
 // content-versus-value modes (at least / at most).
-function layoutEngineSizeModeUsesContent(kind: Int) -> Bool {
+public function layoutEngineSizeModeUsesContent(kind: Int) -> Bool {
     return kind == 3 || kind == 5 || kind == 6 || kind == 7
 }
 
@@ -61,14 +61,14 @@ function layoutEngineSizeModeUsesContent(kind: Int) -> Bool {
 // was offered to it. The child is resolved against the parent's final size in
 // the placement pass instead — the main axis from the leftover space, the cross
 // axis from the container — so it still fills exactly what it was asked to.
-function layoutEngineContentExtent(childOuter: Float, childKind: Int, parentUsesContent: Bool) -> Float {
+public function layoutEngineContentExtent(childOuter: Float, childKind: Int, parentUsesContent: Bool) -> Float {
     if parentUsesContent && layoutEngineSizeModeIsFill(kind: childKind) {
         return 0.0
     }
     return childOuter
 }
 
-function layoutEngineComputeCrossOffset(childSize: Float, available: Float, alignmentCode: Int) -> Float {
+public function layoutEngineComputeCrossOffset(childSize: Float, available: Float, alignmentCode: Int) -> Float {
     if alignmentCode == 1 {
         return 0.0
     }
@@ -81,7 +81,7 @@ function layoutEngineComputeCrossOffset(childSize: Float, available: Float, alig
     return 0.0
 }
 
-function layoutEngineResolvedStackMainSize(kind: Int, current: Float, fillSize: Float, flex: Int) -> Float {
+public function layoutEngineResolvedStackMainSize(kind: Int, current: Float, fillSize: Float, flex: Int) -> Float {
     if kind == 2 {
         return fillSize * intAsFloat(value: flex)
     }
@@ -95,12 +95,12 @@ function layoutEngineResolvedStackMainSize(kind: Int, current: Float, fillSize: 
 // cross axis. Without this, `VStackFill{...}.width(W)` (Start cross) left its
 // Fill rows at the width they measured against the grandparent — overflowing W,
 // which pushed trailing content (after a Spacer) past the clip and dropped it.
-function layoutEngineResolvedStackCrossSize(alignmentCode: Int, crossKind: Int, current: Float, available: Float, marginTotal: Float) -> Float {
+public function layoutEngineResolvedStackCrossSize(alignmentCode: Int, crossKind: Int, current: Float, available: Float, marginTotal: Float) -> Float {
     if alignmentCode == 4 || crossKind == 2 {
         return nonNegative(value: available - marginTotal)
     }
     // A child taller than the row it sits on (or wider than its column) is
-    // bounded by the container: centring it would hang it across both edges,
+    // bounded by the container: centering it would hang it across both edges,
     // over whatever is beside the stack. The container's extent is the one the
     // program stated, so it is the one that governs.
     let bound = nonNegative(value: available - marginTotal)
@@ -110,7 +110,7 @@ function layoutEngineResolvedStackCrossSize(alignmentCode: Int, crossKind: Int, 
     return current
 }
 
-function layoutEngineAlignedOrigin(child: borrow Size, container: borrow Size, origin: borrow Point, alignmentCode: Int) -> Point {
+public function layoutEngineAlignedOrigin(child: borrow Size, container: borrow Size, origin: borrow Point, alignmentCode: Int) -> Point {
     var dx = 0.0
     var dy = 0.0
     if alignmentCode == 2 {

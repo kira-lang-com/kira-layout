@@ -1,26 +1,26 @@
 import Foundation
-function nonNegative(value: Float) -> Float {
+public function nonNegative(value: Float) -> Float {
     return value > 0.0 ? value : 0.0
 }
 
 // Int-to-float conversion. Now a single `Float(...)` cast; this used to be an
 // O(value) accumulation loop because the compiler lacked numeric casts.
-function intAsFloat(value: Int) -> Float {
+public function intAsFloat(value: Int) -> Float {
     return Float(value)
 }
 
-function repeatedSpacing(count: Int, spacing: Float) -> Float {
+public function repeatedSpacing(count: Int, spacing: Float) -> Float {
     if count <= 1 {
         return 0.0
     }
     return intAsFloat(value: count - 1) * spacing
 }
 
-function outerWidth(node: borrow LayoutNode) -> Float {
+public function outerWidth(node: borrow LayoutNode) -> Float {
     return node.measuredW + node.marL + node.marR
 }
 
-function outerHeight(node: borrow LayoutNode) -> Float {
+public function outerHeight(node: borrow LayoutNode) -> Float {
     return node.measuredH + node.marT + node.marB
 }
 
@@ -28,15 +28,15 @@ function outerHeight(node: borrow LayoutNode) -> Float {
 // offset. Kept as `borrow LayoutNode` functions so callers can pass
 // `tree.nodes[i]` directly and let the VM borrow-elide the array read instead of
 // cloning the whole 40-field node just to sum a few scalars.
-function outerRight(node: borrow LayoutNode) -> Float {
+public function outerRight(node: borrow LayoutNode) -> Float {
     return node.dx + node.measuredW + node.marL + node.marR
 }
 
-function outerBottom(node: borrow LayoutNode) -> Float {
+public function outerBottom(node: borrow LayoutNode) -> Float {
     return node.dy + node.measuredH + node.marT + node.marB
 }
 
-function constrainedChildAxisOffer(parentAvailable: Float, kind: Int, value: Float) -> Float {
+public function constrainedChildAxisOffer(parentAvailable: Float, kind: Int, value: Float) -> Float {
     if kind == 1 {
         return nonNegative(value: value)
     }
@@ -55,7 +55,7 @@ function constrainedChildAxisOffer(parentAvailable: Float, kind: Int, value: Flo
     return parentAvailable
 }
 
-function childAvailableSize(parentAvailable: borrow Size, parent: borrow LayoutNode, child: borrow LayoutNode, childCount: Int) -> Size {
+public function childAvailableSize(parentAvailable: borrow Size, parent: borrow LayoutNode, child: borrow LayoutNode, childCount: Int) -> Size {
     var width = parentAvailable.width
     var height = parentAvailable.height
 

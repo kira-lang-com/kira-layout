@@ -3,11 +3,11 @@ import Foundation
 // `tree.nodes[index]` directly: the VM borrow-elides the element read (no node
 // clone) and reads all the gate fields through the alias. Cloning the whole
 // ~40-field node just to test the skip condition was a per-frame hot spot.
-function layoutMeasureShouldSkip(node: borrow LayoutNode, offerW: Float, offerH: Float) -> Bool {
+public function layoutMeasureShouldSkip(node: borrow LayoutNode, offerW: Float, offerH: Float) -> Bool {
     return !node.subtreeDirty && node.measureCacheValid && !node.placeResized && (node.offerIndependent || (node.measureOfferW == offerW && node.measureOfferH == offerH))
 }
 
-function layoutEngineMeasure(tree: borrow mut LayoutTree, index: Int, available: borrow Size) {
+public function layoutEngineMeasure(tree: borrow mut LayoutTree, index: Int, available: borrow Size) {
     var result = tree
     if layoutMeasureShouldSkip(node: result.nodes[index], offerW: available.width, offerH: available.height) {
         result.measureSkips = result.measureSkips + 1
@@ -51,7 +51,7 @@ function layoutEngineMeasure(tree: borrow mut LayoutTree, index: Int, available:
     return
 }
 
-function layoutEngineComputeContentSize(tree: borrow LayoutTree, index: Int, available: borrow Size) -> Size {
+public function layoutEngineComputeContentSize(tree: borrow LayoutTree, index: Int, available: borrow Size) -> Size {
     let arrangeCode = tree.nodes[index].arrangeCode
     if arrangeCode == 1 {
         return layoutEngineComputeStackContentSize(tree: tree, index: index)
@@ -73,7 +73,7 @@ function layoutEngineComputeContentSize(tree: borrow LayoutTree, index: Int, ava
 // A `Fill` or percentage child is measured at the whole offer, so a row holding
 // one always sums past its own width. That child is what the row's spare space
 // was for, so it is what the row takes back.
-function layoutEngineChildIsFlexible(kind: Int) -> Bool {
+public function layoutEngineChildIsFlexible(kind: Int) -> Bool {
     return kind == 2 || kind == 4
 }
 
@@ -89,7 +89,7 @@ function layoutEngineChildIsFlexible(kind: Int) -> Bool {
 // filling document — where the document gives the space back — and a row of
 // fixed pills too wide for the column they are in, where every pill gives a
 // share.
-function layoutEngineFitStackChildren(tree: borrow mut LayoutTree, index: Int, available: borrow Size) {
+public function layoutEngineFitStackChildren(tree: borrow mut LayoutTree, index: Int, available: borrow Size) {
     var result = tree
     if result.nodes[index].arrangeCode != 1 {
         return
@@ -158,7 +158,7 @@ function layoutEngineFitStackChildren(tree: borrow mut LayoutTree, index: Int, a
     return
 }
 
-function layoutEngineComputeStackContentSize(tree: borrow LayoutTree, index: Int) -> Size {
+public function layoutEngineComputeStackContentSize(tree: borrow LayoutTree, index: Int) -> Size {
     let childCount = tree.nodes[index].childCount
     let firstChild = tree.nodes[index].firstChild
     let axisCode = tree.nodes[index].axisCode
@@ -211,7 +211,7 @@ function layoutEngineComputeStackContentSize(tree: borrow LayoutTree, index: Int
     return Size(width: width, height: height)
 }
 
-function layoutEngineComputeAbsoluteContentSize(tree: borrow LayoutTree, index: Int) -> Size {
+public function layoutEngineComputeAbsoluteContentSize(tree: borrow LayoutTree, index: Int) -> Size {
     let childCount = tree.nodes[index].childCount
     let firstChild = tree.nodes[index].firstChild
     let usesContentW = layoutEngineSizeModeUsesContent(kind: tree.nodes[index].wKind)
@@ -230,7 +230,7 @@ function layoutEngineComputeAbsoluteContentSize(tree: borrow LayoutTree, index: 
     return Size(width: width, height: height)
 }
 
-function layoutEngineComputeOverlayContentSize(tree: borrow LayoutTree, index: Int) -> Size {
+public function layoutEngineComputeOverlayContentSize(tree: borrow LayoutTree, index: Int) -> Size {
     let childCount = tree.nodes[index].childCount
     let firstChild = tree.nodes[index].firstChild
     let usesContentW = layoutEngineSizeModeUsesContent(kind: tree.nodes[index].wKind)
@@ -249,7 +249,7 @@ function layoutEngineComputeOverlayContentSize(tree: borrow LayoutTree, index: I
     return Size(width: width, height: height)
 }
 
-function layoutEngineComputeGridContentSize(tree: borrow LayoutTree, index: Int) -> Size {
+public function layoutEngineComputeGridContentSize(tree: borrow LayoutTree, index: Int) -> Size {
     let columns = tree.nodes[index].columns
     if columns <= 0 {
         return Size(width: 0.0, height: 0.0)
@@ -288,7 +288,7 @@ function layoutEngineComputeGridContentSize(tree: borrow LayoutTree, index: Int)
     return Size(width: totalWidth, height: totalHeight)
 }
 
-function layoutEngineComputeWrapContentSize(tree: borrow LayoutTree, index: Int, available: borrow Size) -> Size {
+public function layoutEngineComputeWrapContentSize(tree: borrow LayoutTree, index: Int, available: borrow Size) -> Size {
     let childCount = tree.nodes[index].childCount
     let firstChild = tree.nodes[index].firstChild
     let spacing = tree.nodes[index].spacing

@@ -1,22 +1,22 @@
 /// Layout enumerations and types
-enum Axis {
+public enum Axis {
     Horizontal
     Vertical
 }
 
-enum CrossAlignment {
+public enum CrossAlignment {
     Start
     Center
     End
     Stretch
     // Children of a horizontal stack line up on the BASELINE each one reports
-    // rather than on an edge or a centre. A run of text reports where its
+    // rather than on an edge or a center. A run of text reports where its
     // letters sit; anything else reports its bottom edge, which is what a glyph
     // or a control standing beside a word aligns to.
     Baseline
 }
 
-enum Alignment {
+public enum Alignment {
     TopLeading
     Top
     TopTrailing
@@ -28,7 +28,7 @@ enum Alignment {
     BottomTrailing
 }
 
-enum SizeMode {
+public enum SizeMode {
     Fixed(Float)
     Fill
     Hug
@@ -50,7 +50,7 @@ enum SizeMode {
     Reveal(Float)
 }
 
-enum ArrangeMode {
+public enum ArrangeMode {
     Stack
     Absolute
     Grid

@@ -1,6 +1,6 @@
 import Foundation
 /// Layout model - descriptor and flat executable tree.
-struct LayoutDescriptor {
+public struct LayoutDescriptor {
     var width: SizeMode
     var height: SizeMode
     var flex: Int = 0
@@ -24,7 +24,7 @@ struct LayoutDescriptor {
     var clipContent: Bool = false
 }
 
-struct LayoutNode {
+public struct LayoutNode {
     // Resolved geometry, stored as inline scalars (not `Size`/`Point` structs):
     // a node is bound (`let node = tree.nodes[i]`) thousands of times per resize
     // frame, and a nested struct field would deep-copy a heap `Size` + `Point` on
@@ -99,7 +99,7 @@ struct LayoutNode {
     var offerIndependent: Bool = false
 }
 
-struct LayoutTree {
+public struct LayoutTree {
     var nodes: [LayoutNode]
     // Per-node `LayoutDescriptor`, parallel to `nodes` (same index space). The
     // descriptor is the heap-bearing source-of-truth (SizeMode payloads,
@@ -121,7 +121,7 @@ struct LayoutTree {
 
 /// Reset the per-pass instrumentation counters. Call once before a
 /// measure+place pass so `measureSkips` / `placeSkips` reflect that pass alone.
-function layoutResetCounters(tree: LayoutTree) -> LayoutTree {
+public function layoutResetCounters(tree: LayoutTree) -> LayoutTree {
     var t = tree
     t.measureComputes = 0
     t.measureSkips = 0
@@ -133,7 +133,7 @@ function layoutResetCounters(tree: LayoutTree) -> LayoutTree {
 /// Compute parent indices for a flat layout tree. Root and detached nodes map
 /// to -1. The flat layout always appends descendants after their parent, so a
 /// single forward scan suffices.
-function layoutParentIndices(tree: borrow LayoutTree) -> [Int] {
+public function layoutParentIndices(tree: borrow LayoutTree) -> [Int] {
     var parents: [Int] = []
     var i = 0
     while i < tree.nodes.count {
@@ -157,7 +157,7 @@ function layoutParentIndices(tree: borrow LayoutTree) -> [Int] {
 /// everything else is marked clean. This is the precise invalidation that lets
 /// the engine skip untouched subtrees -- a change dirties only the path from the
 /// changed node to the root, leaving sibling subtrees reusable.
-function layoutPropagateDirty(tree: borrow mut LayoutTree, selfChanged: borrow [Bool]) {
+public function layoutPropagateDirty(tree: borrow mut LayoutTree, selfChanged: borrow [Bool]) {
     let parents = layoutParentIndices(tree)
     var i = 0
     while i < tree.nodes.count {
@@ -179,7 +179,7 @@ function layoutPropagateDirty(tree: borrow mut LayoutTree, selfChanged: borrow [
 }
 
 /// Mark the entire tree dirty (forces a full recompute on the next pass).
-function layoutMarkAllDirty(tree: borrow mut LayoutTree) {
+public function layoutMarkAllDirty(tree: borrow mut LayoutTree) {
     var i = 0
     while i < tree.nodes.count {
         tree.nodes[i].subtreeDirty = true
@@ -195,7 +195,7 @@ function layoutMarkAllDirty(tree: borrow mut LayoutTree) {
 /// geometry for every subtree whose offer and origin are unchanged. Sound only
 /// when the descriptors did not change (the retained re-layout path, where the
 /// view tree and every descriptor are identical and only the viewport differs).
-function layoutMarkAllClean(tree: borrow mut LayoutTree) {
+public function layoutMarkAllClean(tree: borrow mut LayoutTree) {
     var i = 0
     while i < tree.nodes.count {
         tree.nodes[i].subtreeDirty = false
@@ -207,7 +207,7 @@ function layoutMarkAllClean(tree: borrow mut LayoutTree) {
 /// True when two flat trees have identical structure (node count and each
 /// node's child span). When structure matches, the cached tree can be reused
 /// with patched descriptors; otherwise a full rebuild is required.
-function layoutStructureMatches(a: borrow LayoutTree, b: borrow LayoutTree) -> Bool {
+public function layoutStructureMatches(a: borrow LayoutTree, b: borrow LayoutTree) -> Bool {
     if a.nodes.count != b.nodes.count {
         return false
     }
@@ -228,18 +228,18 @@ function layoutStructureMatches(a: borrow LayoutTree, b: borrow LayoutTree) -> B
 // not one arm but thirteen — and the arms it is easiest to forget are the ones
 // that silently answer `false` for a mode against ITSELF, which reads as a node
 // whose size never compares equal and so relayouts on every frame.
-function sizeModeEqual(a: SizeMode, b: SizeMode) -> Bool {
+public function sizeModeEqual(a: SizeMode, b: SizeMode) -> Bool {
     if sizeModeKind(a) != sizeModeKind(b) {
         return false
     }
     return sizeModeValue(a) == sizeModeValue(b)
 }
 
-function sizeModeIsFixed(mode: borrow SizeMode) -> Bool {
+public function sizeModeIsFixed(mode: borrow SizeMode) -> Bool {
     return sizeModeIsFixedKind(kind: sizeModeKind(mode))
 }
 
-function sizeModeKind(mode: borrow SizeMode) -> Int {
+public function sizeModeKind(mode: borrow SizeMode) -> Int {
     match mode {
         Fixed(value) -> return 1
         Fill -> return 2
@@ -251,7 +251,7 @@ function sizeModeKind(mode: borrow SizeMode) -> Int {
     }
 }
 
-function sizeModeValue(mode: borrow SizeMode) -> Float {
+public function sizeModeValue(mode: borrow SizeMode) -> Float {
     match mode {
         Fixed(value) -> return value
         Fill -> return 0.0
@@ -263,11 +263,11 @@ function sizeModeValue(mode: borrow SizeMode) -> Float {
     }
 }
 
-function sizeModeIsFixedKind(kind: Int) -> Bool {
+public function sizeModeIsFixedKind(kind: Int) -> Bool {
     return kind == 1
 }
 
-function arrangeModeCode(arrange: borrow ArrangeMode) -> Int {
+public function arrangeModeCode(arrange: borrow ArrangeMode) -> Int {
     match arrange {
         Stack -> return 1
         Absolute -> return 2
@@ -278,14 +278,14 @@ function arrangeModeCode(arrange: borrow ArrangeMode) -> Int {
     }
 }
 
-function axisValueCode(axis: borrow Axis) -> Int {
+public function axisValueCode(axis: borrow Axis) -> Int {
     match axis {
         Horizontal -> return 1
         Vertical -> return 2
     }
 }
 
-function crossAlignmentCode(alignment: borrow CrossAlignment) -> Int {
+public function crossAlignmentCode(alignment: borrow CrossAlignment) -> Int {
     match alignment {
         Start -> return 1
         Center -> return 2
@@ -296,11 +296,11 @@ function crossAlignmentCode(alignment: borrow CrossAlignment) -> Int {
 }
 
 // A stack that lines its children up on their baselines.
-function crossAlignmentIsBaseline(code: Int) -> Bool {
+public function crossAlignmentIsBaseline(code: Int) -> Bool {
     return code == 5
 }
 
-function alignmentValueCode(alignment: borrow Alignment) -> Int {
+public function alignmentValueCode(alignment: borrow Alignment) -> Int {
     match alignment {
         TopLeading -> return 1
         Top -> return 2
@@ -318,11 +318,11 @@ function alignmentValueCode(alignment: borrow Alignment) -> Int {
 /// measured size is the same regardless of the offered constraints, so a resize
 /// can reuse its cached geometry without recomputing. Computed once when the tree
 /// is built (relayout reuses it).
-function layoutDescriptorOfferIndependent(desc: borrow LayoutDescriptor) -> Bool {
+public function layoutDescriptorOfferIndependent(desc: borrow LayoutDescriptor) -> Bool {
     return sizeModeIsFixed(desc.width) && sizeModeIsFixed(desc.height)
 }
 
-function layoutNodeOfferIndependent(node: borrow LayoutNode) -> Bool {
+public function layoutNodeOfferIndependent(node: borrow LayoutNode) -> Bool {
     return sizeModeIsFixedKind(kind: node.wKind) && sizeModeIsFixedKind(kind: node.hKind)
 }
 
@@ -333,7 +333,7 @@ function layoutNodeOfferIndependent(node: borrow LayoutNode) -> Bool {
 /// into its `var result`, and a third time on the way back into the array it
 /// came from — three copies to overwrite twenty of its fields, once per node,
 /// every frame.
-function layoutNodeFlattenDescriptor(node: borrow mut LayoutNode, desc: borrow LayoutDescriptor) {
+public function layoutNodeFlattenDescriptor(node: borrow mut LayoutNode, desc: borrow LayoutDescriptor) {
     node.wKind = sizeModeKind(desc.width)
     node.wVal = sizeModeValue(desc.width)
     node.hKind = sizeModeKind(desc.height)
@@ -364,7 +364,7 @@ function layoutNodeFlattenDescriptor(node: borrow mut LayoutNode, desc: borrow L
 /// Flatten every node's descriptor into its inline scalar fields, reading from
 /// the tree's parallel `descriptors` array. Requires `descriptors` to be
 /// populated and index-aligned with `nodes`.
-function layoutTreeFlattenDescriptors(tree: borrow mut LayoutTree) {
+public function layoutTreeFlattenDescriptors(tree: borrow mut LayoutTree) {
     var index = 0
     while index < tree.nodes.count {
         layoutNodeFlattenDescriptor(tree.nodes[index], tree.descriptors[index])
@@ -373,7 +373,7 @@ function layoutTreeFlattenDescriptors(tree: borrow mut LayoutTree) {
     return
 }
 
-function edgeInsetsEqual(a: borrow EdgeInsets, b: borrow EdgeInsets) -> Bool {
+public function edgeInsetsEqual(a: borrow EdgeInsets, b: borrow EdgeInsets) -> Bool {
     return a.top == b.top && a.trailing == b.trailing && a.bottom == b.bottom && a.leading == b.leading
 }
 
@@ -382,7 +382,7 @@ function edgeInsetsEqual(a: borrow EdgeInsets, b: borrow EdgeInsets) -> Bool {
 /// frames. Enum-coded fields (arrange/axis/alignment/overlayAlignment) compare
 /// by value; float/int fields compare exactly because they are recomputed from
 /// the same inputs each frame and are bit-stable when unchanged.
-function layoutDescriptorEqual(a: borrow LayoutDescriptor, b: borrow LayoutDescriptor) -> Bool {
+public function layoutDescriptorEqual(a: borrow LayoutDescriptor, b: borrow LayoutDescriptor) -> Bool {
     return sizeModeEqual(a.width, b.width) &&
         sizeModeEqual(a.height, b.height) &&
         a.flex == b.flex &&
@@ -401,20 +401,20 @@ function layoutDescriptorEqual(a: borrow LayoutDescriptor, b: borrow LayoutDescr
         a.clipContent == b.clipContent
 }
 
-function layoutFrame(tree: borrow LayoutTree, index: Int) -> Rect {
+public function layoutFrame(tree: borrow LayoutTree, index: Int) -> Rect {
     // Read the four geometry scalars directly through the array (borrow-elided)
     // instead of cloning the whole ~40-field node. Called once per rendered view.
     return Rect(x: tree.nodes[index].originX, y: tree.nodes[index].originY, width: tree.nodes[index].measuredW, height: tree.nodes[index].measuredH)
 }
 
-function layoutNodeWithSize(node: borrow LayoutNode, size: borrow Size) -> LayoutNode {
+public function layoutNodeWithSize(node: borrow LayoutNode, size: borrow Size) -> LayoutNode {
     var result = node
     result.measuredW = size.width
     result.measuredH = size.height
     return result
 }
 
-function layoutNodeWithOrigin(node: borrow LayoutNode, origin: borrow Point) -> LayoutNode {
+public function layoutNodeWithOrigin(node: borrow LayoutNode, origin: borrow Point) -> LayoutNode {
     var result = node
     result.originX = origin.x
     result.originY = origin.y
