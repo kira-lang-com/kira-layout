@@ -1,6 +1,6 @@
 import Foundation
 /// Two-pass layout algorithm over a flat tree.
-struct LayoutEngine {
+public struct LayoutEngine {
     function measure(tree: borrow mut LayoutTree, index: Int, available: borrow Size) {
         var result = tree
         layoutEngineMeasure(tree: result, index: index, available: available)

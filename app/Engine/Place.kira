@@ -9,7 +9,7 @@ import Foundation
 // index), the needed scalars are hoisted into plain scalar locals *before* that
 // call — preserving the old snapshot semantics without the per-node struct clone.
 
-function layoutEngineTranslateSubtree(tree: borrow mut LayoutTree, index: Int, dx: Float, dy: Float) {
+public function layoutEngineTranslateSubtree(tree: borrow mut LayoutTree, index: Int, dx: Float, dy: Float) {
     var result = tree
     let childCount = result.nodes[index].childCount
     let firstChild = result.nodes[index].firstChild
@@ -26,7 +26,7 @@ function layoutEngineTranslateSubtree(tree: borrow mut LayoutTree, index: Int, d
     return
 }
 
-function layoutEnginePlace(tree: borrow mut LayoutTree, index: Int, origin: borrow Point) {
+public function layoutEnginePlace(tree: borrow mut LayoutTree, index: Int, origin: borrow Point) {
     var result = tree
     let subtreeDirty = result.nodes[index].subtreeDirty
     let placeCacheValid = result.nodes[index].placeCacheValid
@@ -83,7 +83,7 @@ function layoutEnginePlace(tree: borrow mut LayoutTree, index: Int, origin: borr
     return
 }
 
-function layoutEngineStackFillCount(tree: borrow LayoutTree, index: Int) -> Int {
+public function layoutEngineStackFillCount(tree: borrow LayoutTree, index: Int) -> Int {
     let axisCode = tree.nodes[index].axisCode
     let childCount = tree.nodes[index].childCount
     let firstChild = tree.nodes[index].firstChild
@@ -101,7 +101,7 @@ function layoutEngineStackFillCount(tree: borrow LayoutTree, index: Int) -> Int 
     return total
 }
 
-function layoutEngineStackFlexTotal(tree: borrow LayoutTree, index: Int) -> Int {
+public function layoutEngineStackFlexTotal(tree: borrow LayoutTree, index: Int) -> Int {
     let axisCode = tree.nodes[index].axisCode
     let childCount = tree.nodes[index].childCount
     let firstChild = tree.nodes[index].firstChild
@@ -119,7 +119,7 @@ function layoutEngineStackFlexTotal(tree: borrow LayoutTree, index: Int) -> Int 
     return total
 }
 
-function layoutEngineStackFixedTotal(tree: borrow LayoutTree, index: Int) -> Float {
+public function layoutEngineStackFixedTotal(tree: borrow LayoutTree, index: Int) -> Float {
     let axisCode = tree.nodes[index].axisCode
     let childCount = tree.nodes[index].childCount
     let firstChild = tree.nodes[index].firstChild
@@ -137,7 +137,7 @@ function layoutEngineStackFixedTotal(tree: borrow LayoutTree, index: Int) -> Flo
     return total
 }
 
-function layoutEngineRemeasurePlacedChild(tree: borrow mut LayoutTree, childIndex: Int, width: Float, height: Float) {
+public function layoutEngineRemeasurePlacedChild(tree: borrow mut LayoutTree, childIndex: Int, width: Float, height: Float) {
     var result = tree
     let childMeasuredW = result.nodes[childIndex].measuredW
     let childMeasuredH = result.nodes[childIndex].measuredH
@@ -159,7 +159,7 @@ function layoutEngineRemeasurePlacedChild(tree: borrow mut LayoutTree, childInde
 // on: every child is then dropped by the difference between that and its own.
 // A child with no baseline of its own reports its bottom edge, so a glyph or a
 // control beside a run of text hangs from the same line the letters sit on.
-function layoutEngineStackBaseline(tree: borrow LayoutTree, index: Int) -> Float {
+public function layoutEngineStackBaseline(tree: borrow LayoutTree, index: Int) -> Float {
     let childCount = tree.nodes[index].childCount
     let firstChild = tree.nodes[index].firstChild
     var deepest = 0.0
@@ -182,7 +182,7 @@ function layoutEngineStackBaseline(tree: borrow LayoutTree, index: Int) -> Float
 // does. A child that FILLS the row offers nothing at all: it is as tall as
 // whatever the row turns out to be, so letting it speak would drag the line to
 // the row's own bottom and take every word down with it.
-function layoutEngineNodeBaseline(tree: borrow LayoutTree, index: Int) -> Float {
+public function layoutEngineNodeBaseline(tree: borrow LayoutTree, index: Int) -> Float {
     let baseline = tree.nodes[index].baseline
     if baseline > 0.0 {
         return baseline
@@ -193,7 +193,7 @@ function layoutEngineNodeBaseline(tree: borrow LayoutTree, index: Int) -> Float 
     return outerHeight(node: tree.nodes[index])
 }
 
-function layoutEngineChildBaselineOffset(tree: borrow LayoutTree, childIndex: Int, rowBaseline: Float) -> Float {
+public function layoutEngineChildBaselineOffset(tree: borrow LayoutTree, childIndex: Int, rowBaseline: Float) -> Float {
     let baseline = layoutEngineNodeBaseline(tree: tree, index: childIndex)
     if baseline <= 0.0 {
         return 0.0
@@ -201,7 +201,7 @@ function layoutEngineChildBaselineOffset(tree: borrow LayoutTree, childIndex: In
     return nonNegative(value: rowBaseline - baseline)
 }
 
-function layoutEnginePlaceStack(tree: borrow mut LayoutTree, index: Int, origin: borrow Point, available: borrow Size) {
+public function layoutEnginePlaceStack(tree: borrow mut LayoutTree, index: Int, origin: borrow Point, available: borrow Size) {
     var result = tree
     let axisCode = result.nodes[index].axisCode
     let alignCode = result.nodes[index].alignCode
@@ -259,7 +259,7 @@ function layoutEnginePlaceStack(tree: borrow mut LayoutTree, index: Int, origin:
     return
 }
 
-function layoutEnginePlaceAbsolute(tree: borrow mut LayoutTree, index: Int, origin: borrow Point) {
+public function layoutEnginePlaceAbsolute(tree: borrow mut LayoutTree, index: Int, origin: borrow Point) {
     var result = tree
     let childCount = result.nodes[index].childCount
     let firstChild = result.nodes[index].firstChild
@@ -281,7 +281,7 @@ function layoutEnginePlaceAbsolute(tree: borrow mut LayoutTree, index: Int, orig
 // loop over every child: placing only child 0 left later siblings unplaced at
 // (0,0) — the "trailing content silently drops" bug, and an unplaced node's stale
 // geometry crashes the render/hit pass at runtime.
-function layoutEnginePlaceFill(tree: borrow mut LayoutTree, index: Int, origin: borrow Point, available: borrow Size) {
+public function layoutEnginePlaceFill(tree: borrow mut LayoutTree, index: Int, origin: borrow Point, available: borrow Size) {
     var result = tree
     let childCount = result.nodes[index].childCount
     let firstChild = result.nodes[index].firstChild
@@ -307,14 +307,14 @@ function layoutEnginePlaceFill(tree: borrow mut LayoutTree, index: Int, origin: 
 // the same way a stack resolves its cross axis. It contributed nothing to a
 // content-sized container's measurement, so this is where it learns how large
 // "fill" turned out to be.
-function layoutEngineOverlayChildExtent(kind: Int, current: Float, available: Float, marginTotal: Float) -> Float {
+public function layoutEngineOverlayChildExtent(kind: Int, current: Float, available: Float, marginTotal: Float) -> Float {
     if layoutEngineSizeModeIsFill(kind: kind) {
         return nonNegative(value: available - marginTotal)
     }
     return current
 }
 
-function layoutEnginePlaceOverlay(tree: borrow mut LayoutTree, index: Int, origin: borrow Point, available: borrow Size) {
+public function layoutEnginePlaceOverlay(tree: borrow mut LayoutTree, index: Int, origin: borrow Point, available: borrow Size) {
     var result = tree
     let childCount = result.nodes[index].childCount
     let firstChild = result.nodes[index].firstChild
@@ -337,7 +337,7 @@ function layoutEnginePlaceOverlay(tree: borrow mut LayoutTree, index: Int, origi
     return
 }
 
-function layoutEnginePlaceGrid(tree: borrow mut LayoutTree, index: Int, origin: borrow Point, available: borrow Size) {
+public function layoutEnginePlaceGrid(tree: borrow mut LayoutTree, index: Int, origin: borrow Point, available: borrow Size) {
     var result = tree
     let columns = result.nodes[index].columns
     if columns <= 0 {
@@ -372,7 +372,7 @@ function layoutEnginePlaceGrid(tree: borrow mut LayoutTree, index: Int, origin: 
     return
 }
 
-function layoutEnginePlaceWrap(tree: borrow mut LayoutTree, index: Int, origin: borrow Point, available: borrow Size) {
+public function layoutEnginePlaceWrap(tree: borrow mut LayoutTree, index: Int, origin: borrow Point, available: borrow Size) {
     var result = tree
     let childCount = result.nodes[index].childCount
     let firstChild = result.nodes[index].firstChild
