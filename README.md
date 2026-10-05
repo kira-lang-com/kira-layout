@@ -30,6 +30,15 @@ app/
 ## Quick Start
 
 ```bash
+
+These commands want **`kk`**, the native frontend of the
+[Kira Language Framework](https://github.com/kira-lang-com/klf-kira), which
+`klf build .` produces in that repository. `kk`'s binary is also called `kira`,
+so the two are told apart by which one is on your `PATH`, not by the name you
+type. The oracle compiler from
+[kira-lang-com/kira](https://github.com/kira-lang-com/kira) aborts partway
+through semantic analysis on this codebase.
+
 kira check
 kira test --backend vm tests/layout_kik
 kira test --backend llvm tests/layout_kik
