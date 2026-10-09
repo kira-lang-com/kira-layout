@@ -21,3 +21,7 @@ ships as a library other Kira programs depend on.
 - **Enum variants.** Write a leading dot — `.Vertical` — wherever the expected
   type is known. Kira resolves it against that type and compiles `x == .Red` to
   a tag compare with no throwaway enum.
+
+# Specs
+
+Any spec is the rule. Read it before changing what it covers and do exactly what it says. If the spec does not say it, it does not exist: never invent a layout, encoding, convention or meaning to make a case work, and never route around a limit the spec sets. A case the spec does not cover is a question for the user, not a decision.
