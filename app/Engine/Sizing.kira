@@ -1,81 +1,79 @@
 import Foundation
-public function nonNegative(value: Float) -> Float {
+
+public function nonNegative(value: Number) -> Number {
     return value > 0.0 ? value : 0.0
 }
 
-// Int-to-float conversion. Now a single `Float(...)` cast; this used to be an
-// O(value) accumulation loop because the compiler lacked numeric casts.
-public function intAsFloat(value: Int) -> Float {
-    return Float(value)
-}
-
-public function repeatedSpacing(count: Int, spacing: Float) -> Float {
+public function repeatedSpacing(count: Number, spacing: Number) -> Number {
     if count <= 1 {
         return 0.0
     }
-    return intAsFloat(value: count - 1) * spacing
+    return Number(count - 1) * spacing
 }
 
-public function outerWidth(node: borrow LayoutNode) -> Float {
-    return node.measuredW + node.marL + node.marR
-}
-
-public function outerHeight(node: borrow LayoutNode) -> Float {
-    return node.measuredH + node.marT + node.marB
-}
-
-// Absolute-arrange extent helpers: the child's outer size plus its descriptor
-// offset. Kept as `borrow LayoutNode` functions so callers can pass
-// `tree.nodes[i]` directly and let the VM borrow-elide the array read instead of
-// cloning the whole 40-field node just to sum a few scalars.
-public function outerRight(node: borrow LayoutNode) -> Float {
-    return node.dx + node.measuredW + node.marL + node.marR
-}
-
-public function outerBottom(node: borrow LayoutNode) -> Float {
-    return node.dy + node.measuredH + node.marT + node.marB
-}
-
-public function constrainedChildAxisOffer(parentAvailable: Float, kind: Int, value: Float) -> Float {
-    if kind == 1 {
-        return nonNegative(value: value)
+extend LayoutNode {
+    function outerWidth() -> Number {
+        return self.measuredW + self.marL + self.marR
     }
-    if kind == 2 {
-        return nonNegative(value: parentAvailable)
+
+    function outerHeight() -> Number {
+        return self.measuredH + self.marT + self.marB
     }
-    if kind == 4 {
-        return nonNegative(value: parentAvailable * value)
+
+    // Absolute-arrange extent helpers: the child's outer size plus its descriptor
+    // offset. Kept as `borrow LayoutNode` functions so callers can pass
+    // `tree.nodes[i]` directly and let the VM borrow-elide the array read instead of
+    // cloning the whole 40-field node just to sum a few scalars.
+    function outerRight() -> Number {
+        return self.dx + self.measuredW + self.marL + self.marR
     }
-    if kind == 5 {
-        return parentAvailable > value ? parentAvailable : value
+
+    function outerBottom() -> Number {
+        return self.dy + self.measuredH + self.marT + self.marB
     }
-    if kind == 6 {
-        return parentAvailable < value ? parentAvailable : value
-    }
-    return parentAvailable
 }
 
-public function childAvailableSize(parentAvailable: borrow Size, parent: borrow LayoutNode, child: borrow LayoutNode, childCount: Int) -> Size {
+public function constrainedChildAxisOffer(
+    parentAvailable: Number,
+    mode: borrow SizeMode
+) -> Number {
+    match mode {
+        Fixed(value) -> return nonNegative(value: value)
+        Fill -> return nonNegative(value: parentAvailable)
+        Fraction(of) -> return nonNegative(value: parentAvailable * of)
+        Min(value) -> return parentAvailable > value ? parentAvailable : value
+        Max(value) -> return parentAvailable < value ? parentAvailable : value
+        Hug -> return parentAvailable
+        Reveal(fraction) -> return parentAvailable
+    }
+}
+
+public function childAvailableSize(
+    parentAvailable: borrow Size,
+    parent: borrow LayoutNode,
+    child: borrow LayoutNode,
+    childCount: Number
+) -> Size {
     var width = parentAvailable.width
     var height = parentAvailable.height
 
-    if parent.arrangeCode == 1 {
+    if parent.arrange == .Stack {
         let totalSpacing = repeatedSpacing(count: childCount, spacing: parent.spacing)
-        if parent.axisCode == 1 {
+        if parent.axis == .Horizontal {
             width = width - totalSpacing
         } else {
             height = height - totalSpacing
         }
     }
 
-    if parent.arrangeCode == 3 {
+    if parent.arrange == .Grid {
         if parent.columns > 0 {
             let totalSpacing = repeatedSpacing(count: parent.columns, spacing: parent.spacing)
-            width = (width - totalSpacing) / intAsFloat(value: parent.columns)
+            width = (width - totalSpacing) / Number(parent.columns)
         }
-    } else if parent.arrangeCode == 5 {
-        width = constrainedChildAxisOffer(parentAvailable.width, parent.wKind, parent.wVal)
-        height = constrainedChildAxisOffer(parentAvailable.height, parent.hKind, parent.hVal)
+    } else if parent.arrange == .Overlay {
+        width = constrainedChildAxisOffer(parentAvailable.width, parent.width)
+        height = constrainedChildAxisOffer(parentAvailable.height, parent.height)
     }
 
     return Size(

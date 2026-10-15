@@ -1,8 +1,8 @@
 import Foundation
 
 public struct EdgeInsets {
-    var top: Float = 0.0
-    var trailing: Float = 0.0
-    var bottom: Float = 0.0
-    var leading: Float = 0.0
+    var top: Number = 0.0
+    var trailing: Number = 0.0
+    var bottom: Number = 0.0
+    var leading: Number = 0.0
 }

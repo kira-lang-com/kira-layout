@@ -29,12 +29,12 @@ public enum Alignment {
 }
 
 public enum SizeMode {
-    Fixed(Float)
+    Fixed(Number)
     Fill
     Hug
-    Fraction(Float)
-    Min(Float)
-    Max(Float)
+    Fraction(Number)
+    Min(Number)
+    Max(Number)
     // Hug the content, then take this fraction of it.
     //
     // A drawer, a disclosure, a submenu growing out of the row that owns it.
@@ -47,7 +47,7 @@ public enum SizeMode {
     // layout knows what the content came to. A caller that multiplies a row
     // height by a child count is guessing, and guesses wrong the moment one row
     // is taller than the others.
-    Reveal(Float)
+    Reveal(Number)
 }
 
 public enum ArrangeMode {

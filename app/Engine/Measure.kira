@@ -1,322 +1,382 @@
 import Foundation
-// Measure-skip predicate. Taking the node by `borrow` lets the caller pass
-// `tree.nodes[index]` directly: the VM borrow-elides the element read (no node
-// clone) and reads all the gate fields through the alias. Cloning the whole
-// ~40-field node just to test the skip condition was a per-frame hot spot.
-public function layoutMeasureShouldSkip(node: borrow LayoutNode, offerW: Float, offerH: Float) -> Bool {
-    return !node.subtreeDirty && node.measureCacheValid && !node.placeResized && (node.offerIndependent || (node.measureOfferW == offerW && node.measureOfferH == offerH))
+extend LayoutNode {
+    // Measure-skip predicate. Taking the node by `borrow` lets the caller pass
+    // `tree.nodes[index]` directly: the VM borrow-elides the element read (no node
+    // clone) and reads all the gate fields through the alias. Cloning the whole
+    // ~40-field node just to test the skip condition was a per-frame hot spot.
+    function canSkipMeasure(offerW: Number, offerH: Number) -> Bool {
+        return !self.subtreeDirty && self.measureCacheValid && !self.placeResized && (
+            self.offerIndependent || (self.measureOfferW == offerW && self.measureOfferH == offerH)
+        )
+    }
 }
 
-public function layoutEngineMeasure(tree: borrow mut LayoutTree, index: Int, available: borrow Size) {
-    var result = tree
-    if layoutMeasureShouldSkip(node: result.nodes[index], offerW: available.width, offerH: available.height) {
-        result.measureSkips = result.measureSkips + 1
-        return
-    }
-    result.measureComputes = result.measureComputes + 1
-    // Read node fields directly through the array. Each `result.nodes[index].f`
-    // borrow-elides to an aliased element read of a single scalar instead of
-    // cloning the whole node into a local. `childCount`/`firstChild` are hoisted
-    // into scalar locals because they drive the loop; the recursion never mutates
-    // `index`, so these stay valid across it.
-    let childCount = result.nodes[index].childCount
-    let firstChild = result.nodes[index].firstChild
-    let innerAvailable = Size(
-        width: nonNegative(value: available.width - (result.nodes[index].padL + result.nodes[index].padR)),
-        height: nonNegative(value: available.height - (result.nodes[index].padT + result.nodes[index].padB))
-    )
-
-    var i = 0
-    while i < childCount {
-        let childIndex = firstChild + i
-        let childOffer = childAvailableSize(parentAvailable: innerAvailable, parent: result.nodes[index], child: result.nodes[childIndex], childCount: childCount)
-        layoutEngineMeasure(tree: result, index: childIndex, available: childOffer)
-        i = i + 1
-    }
-
-    layoutEngineFitStackChildren(tree: result, index: index, available: innerAvailable)
-
-    let contentSize = layoutEngineComputeContentSize(tree: result, index: index, available: innerAvailable)
-    let resolvedWidth = layoutEngineResolveOuterSize(kind: result.nodes[index].wKind, value: result.nodes[index].wVal, available: available.width, content: contentSize.width, padding: result.nodes[index].padL + result.nodes[index].padR)
-    let resolvedHeight = layoutEngineResolveOuterSize(kind: result.nodes[index].hKind, value: result.nodes[index].hVal, available: available.height, content: contentSize.height, padding: result.nodes[index].padT + result.nodes[index].padB)
-    // In-place scalar write-back. The child recursion above never touches
-    // `index`, so the element still holds everything except the geometry we
-    // overwrite here. Each store borrow-elides to an aliased in-place field write
-    // (no node clone, no array_set).
-    result.nodes[index].measuredW = resolvedWidth
-    result.nodes[index].measuredH = resolvedHeight
-    result.nodes[index].measureCacheValid = true
-    result.nodes[index].measureOfferW = available.width
-    result.nodes[index].measureOfferH = available.height
-    return
-}
-
-public function layoutEngineComputeContentSize(tree: borrow LayoutTree, index: Int, available: borrow Size) -> Size {
-    let arrangeCode = tree.nodes[index].arrangeCode
-    if arrangeCode == 1 {
-        return layoutEngineComputeStackContentSize(tree: tree, index: index)
-    }
-    if arrangeCode == 2 {
-        return layoutEngineComputeAbsoluteContentSize(tree: tree, index: index)
-    }
-    if arrangeCode == 3 {
-        return layoutEngineComputeGridContentSize(tree: tree, index: index)
-    }
-    if arrangeCode == 4 {
-        return layoutEngineComputeWrapContentSize(tree: tree, index: index, available: available)
-    }
-    return layoutEngineComputeOverlayContentSize(tree: tree, index: index)
-}
-
-// Whether a child gives up space before a fixed sibling does.
-//
-// A `Fill` or percentage child is measured at the whole offer, so a row holding
-// one always sums past its own width. That child is what the row's spare space
-// was for, so it is what the row takes back.
-public function layoutEngineChildIsFlexible(kind: Int) -> Bool {
-    return kind == 2 || kind == 4
-}
-
-// Fits a row's children into the space the row actually has.
-//
-// Every child is offered the whole remaining extent, because what an earlier
-// sibling took is not known until it is measured. Nothing reconciles that
-// afterwards, so a row whose children add up to more than fits lays them out
-// past its own edge, over whatever is beside it.
-//
-// The deficit comes out of the flexible children first and only then out of the
-// rest, which is the difference between a sidebar of declared width beside a
-// filling document — where the document gives the space back — and a row of
-// fixed pills too wide for the column they are in, where every pill gives a
-// share.
-public function layoutEngineFitStackChildren(tree: borrow mut LayoutTree, index: Int, available: borrow Size) {
-    var result = tree
-    if result.nodes[index].arrangeCode != 1 {
-        return
-    }
-    let childCount = result.nodes[index].childCount
-    if childCount == 0 {
-        return
-    }
-    let firstChild = result.nodes[index].firstChild
-    // A row fits its children; a column lets them overflow, because the answer
-    // to a column taller than its space is to scroll it. Compressing there
-    // pushes a block below the size of its own content, and content that does
-    // not fit its box is drawn over whatever is beside it.
-    if result.nodes[index].axisCode != 1 {
-        return
-    }
-    let limit = available.width
-    if limit <= 0.0 {
-        return
-    }
-    let spacingTotal = childCount > 1 ? repeatedSpacing(count: childCount, spacing: result.nodes[index].spacing) : 0.0
-    var children = 0.0
-    var flexible = 0.0
-    var i = 0
-    while i < childCount {
-        let childIndex = firstChild + i
-        let outer = outerWidth(node: result.nodes[childIndex])
-        children = children + outer
-        if layoutEngineChildIsFlexible(kind: result.nodes[childIndex].wKind) {
-            flexible = flexible + outer
+extend LayoutTree {
+    function measure(borrow mut self, index: Number, available: borrow Size) {
+        var result = self
+        if result.nodes[index].canSkipMeasure(offerW: available.width, offerH: available.height) {
+            result.measureSkips++
+            return
         }
-        i = i + 1
-    }
-    let room = nonNegative(value: limit - spacingTotal)
-    if children <= room || children <= 0.0 {
-        return
-    }
-    let deficit = children - room
-    // What the flexible children can give, and what the rest must cover after
-    // they have given it.
-    let fromFlexible = deficit < flexible ? deficit : flexible
-    let flexibleScale = flexible > 0.0 ? (flexible - fromFlexible) / flexible : 1.0
-    let fixed = nonNegative(value: children - flexible)
-    let fromFixed = nonNegative(value: deficit - fromFlexible)
-    let fixedScale = fixed > 0.0 ? nonNegative(value: fixed - fromFixed) / fixed : 1.0
-    i = 0
-    while i < childCount {
-        let childIndex = firstChild + i
-        let margins = result.nodes[childIndex].marL + result.nodes[childIndex].marR
-        let scale = layoutEngineChildIsFlexible(kind: result.nodes[childIndex].wKind) ? flexibleScale : fixedScale
-        if scale < 1.0 {
-            let target = nonNegative(value: outerWidth(node: result.nodes[childIndex]) * scale - margins)
-            let offer = Size(
-                width: target,
-                height: nonNegative(value: available.height - (result.nodes[childIndex].marT + result.nodes[childIndex].marB))
+        result.measureComputes++
+        // Read node fields directly through the array. Each `result.nodes[index].f`
+        // borrow-elides to an aliased element read of a single scalar instead of
+        // cloning the whole node into a local. `childCount`/`firstChild` are hoisted
+        // into scalar locals because they drive the loop; the recursion never mutates
+        // `index`, so these stay valid across it.
+        let childCount = result.nodes[index].childCount
+        let firstChild = result.nodes[index].firstChild
+        let innerAvailable = Size(
+            width: nonNegative(
+                value: available.width - (result.nodes[index].padL + result.nodes[index].padR)
+            ),
+            height: nonNegative(
+                value: available.height - (result.nodes[index].padT + result.nodes[index].padB)
             )
-            layoutEngineMeasure(tree: result, index: childIndex, available: offer)
-            // A child whose own size is exact ignores the smaller offer, so the
-            // fit is applied to the result as well as asked of it.
-            if result.nodes[childIndex].measuredW > target {
-                result.nodes[childIndex].measuredW = target
+        )
+
+        for i in 0..childCount {
+            let childIndex = firstChild + i
+            let childOffer = childAvailableSize(
+                parentAvailable: innerAvailable,
+                parent: result.nodes[index],
+                child: result.nodes[childIndex],
+                childCount: childCount
+            )
+            result.measure(index: childIndex, available: childOffer)
+        }
+
+        result.fitStackChildren(index: index, available: innerAvailable)
+
+        let contentSize = result.contentSize(index: index, available: innerAvailable)
+        let resolvedWidth = result.nodes[index].width.resolveOuter(
+            available: available.width,
+            content: contentSize.width,
+            padding: result.nodes[index].padL + result.nodes[index].padR
+        )
+        let resolvedHeight = result.nodes[index].height.resolveOuter(
+            available: available.height,
+            content: contentSize.height,
+            padding: result.nodes[index].padT + result.nodes[index].padB
+        )
+        // In-place scalar write-back. The child recursion above never touches
+        // `index`, so the element still holds everything except the geometry we
+        // overwrite here. Each store borrow-elides to an aliased in-place field write
+        // (no node clone, no array_set).
+        result.nodes[index].measuredW = resolvedWidth
+        result.nodes[index].measuredH = resolvedHeight
+        result.nodes[index].measureCacheValid = true
+        result.nodes[index].measureOfferW = available.width
+        result.nodes[index].measureOfferH = available.height
+    }
+
+    function contentSize(index: Number, available: borrow Size) -> Size {
+        match self.nodes[index].arrange {
+            Stack -> return self.stackContentSize(index: index)
+            Absolute -> return self.absoluteContentSize(index: index)
+            Grid -> return self.gridContentSize(index: index)
+            Wrap -> return self.wrapContentSize(index: index, available: available)
+            Overlay -> return self.overlayContentSize(index: index)
+            Fill -> return self.overlayContentSize(index: index)
+        }
+    }
+}
+
+extend SizeMode {
+    // Whether a child gives up space before a fixed sibling does.
+    //
+    // A `Fill` or percentage child is measured at the whole offer, so a row holding
+    // one always sums past its own width. That child is what the row's spare space
+    // was for, so it is what the row takes back.
+    function isFlexible() -> Bool {
+        match self {
+            Fill -> return true
+            Fraction(of) -> return true
+            Fixed(value) -> return false
+            Hug -> return false
+            Min(value) -> return false
+            Max(value) -> return false
+            Reveal(fraction) -> return false
+        }
+    }
+}
+
+extend LayoutTree {
+    // Fits a row's children into the space the row actually has.
+    //
+    // Every child is offered the whole remaining extent, because what an earlier
+    // sibling took is not known until it is measured. Nothing reconciles that
+    // afterwards, so a row whose children add up to more than fits lays them out
+    // past its own edge, over whatever is beside it.
+    //
+    // The deficit comes out of the flexible children first and only then out of the
+    // rest, which is the difference between a sidebar of declared width beside a
+    // filling document — where the document gives the space back — and a row of
+    // fixed pills too wide for the column they are in, where every pill gives a
+    // share.
+    function fitStackChildren(borrow mut self, index: Number, available: borrow Size) {
+        var result = self
+        if result.nodes[index].arrange != .Stack {
+            return
+        }
+        let childCount = result.nodes[index].childCount
+        if childCount == 0 {
+            return
+        }
+        let firstChild = result.nodes[index].firstChild
+        // A row fits its children; a column lets them overflow, because the answer
+        // to a column taller than its space is to scroll it. Compressing there
+        // pushes a block below the size of its own content, and content that does
+        // not fit its box is drawn over whatever is beside it.
+        if result.nodes[index].axis != .Horizontal {
+            return
+        }
+        let limit = available.width
+        if limit <= 0.0 {
+            return
+        }
+        let spacingTotal = childCount > 1 ? repeatedSpacing(
+            count : childCount,
+            spacing: result.nodes[index].spacing
+        ): 0.0
+        var children = 0.0
+        var flexible = 0.0
+        for i in 0..childCount {
+            let childIndex = firstChild + i
+            let outer = result.nodes[childIndex].outerWidth()
+            children = children + outer
+            if result.nodes[childIndex].width.isFlexible() {
+                flexible = flexible + outer
             }
         }
-        i = i + 1
-    }
-    return
-}
-
-public function layoutEngineComputeStackContentSize(tree: borrow LayoutTree, index: Int) -> Size {
-    let childCount = tree.nodes[index].childCount
-    let firstChild = tree.nodes[index].firstChild
-    let axisCode = tree.nodes[index].axisCode
-    let spacing = tree.nodes[index].spacing
-    let usesContentW = layoutEngineSizeModeUsesContent(kind: tree.nodes[index].wKind)
-    let usesContentH = layoutEngineSizeModeUsesContent(kind: tree.nodes[index].hKind)
-    // A baseline row is as tall as the deepest baseline plus the longest drop
-    // below one: children hang from a shared line, so the tallest child is not
-    // the row's height when its baseline is higher than the row's.
-    let baselineRow = crossAlignmentIsBaseline(tree.nodes[index].alignCode) && axisCode == 1
-    var aboveBaseline = 0.0
-    var belowBaseline = 0.0
-    var width = 0.0
-    var height = 0.0
-    var i = 0
-    while i < childCount {
-        let childIndex = firstChild + i
-        let childWidth = layoutEngineContentExtent(childOuter: outerWidth(node: tree.nodes[childIndex]), childKind: tree.nodes[childIndex].wKind, parentUsesContent: usesContentW)
-        let childHeight = layoutEngineContentExtent(childOuter: outerHeight(node: tree.nodes[childIndex]), childKind: tree.nodes[childIndex].hKind, parentUsesContent: usesContentH)
-        if axisCode == 1 {
-            width = width + childWidth
-            height = height > childHeight ? height : childHeight
-            if baselineRow {
-                let childBaseline = layoutEngineNodeBaseline(tree: tree, index: childIndex)
-                if childBaseline > 0.0 {
-                    let drop = nonNegative(value: childHeight - childBaseline)
-                    aboveBaseline = aboveBaseline > childBaseline ? aboveBaseline : childBaseline
-                    belowBaseline = belowBaseline > drop ? belowBaseline : drop
+        let room = nonNegative(value: limit - spacingTotal)
+        if children <= room || children <= 0.0 {
+            return
+        }
+        let deficit = children - room
+        // What the flexible children can give, and what the rest must cover after
+        // they have given it.
+        let fromFlexible = deficit < flexible ? deficit : flexible
+        let flexibleScale = flexible > 0.0 ? (flexible - fromFlexible) / flexible : 1.0
+        let fixed = nonNegative(value: children - flexible)
+        let fromFixed = nonNegative(value: deficit - fromFlexible)
+        let fixedScale = fixed > 0.0 ? nonNegative(value : fixed - fromFixed) / fixed: 1.0
+        for i in 0..childCount {
+            let childIndex = firstChild + i
+            let margins = result.nodes[childIndex].marL + result.nodes[childIndex].marR
+            let scale = result.nodes[childIndex].width.isFlexible() ? flexibleScale : fixedScale
+            if scale < 1.0 {
+                let target = nonNegative(
+                    value: result.nodes[childIndex].outerWidth() * scale - margins
+                )
+                let offer = Size(
+                    width: target,
+                    height: nonNegative(
+                        value: available.height - (
+                            result.nodes[childIndex].marT + result.nodes[childIndex].marB
+                        )
+                    )
+                )
+                result.measure(index: childIndex, available: offer)
+                // A child whose own size is exact ignores the smaller offer, so the
+                // fit is applied to the result as well as asked of it.
+                if result.nodes[childIndex].measuredW > target {
+                    result.nodes[childIndex].measuredW = target
                 }
             }
-        } else {
+        }
+    }
+
+    function stackContentSize(index: Number) -> Size {
+        let childCount = self.nodes[index].childCount
+        let firstChild = self.nodes[index].firstChild
+        let horizontal = self.nodes[index].axis == .Horizontal
+        let spacing = self.nodes[index].spacing
+        let usesContentW = self.nodes[index].width.usesContent()
+        let usesContentH = self.nodes[index].height.usesContent()
+        // A baseline row is as tall as the deepest baseline plus the longest drop
+        // below one: children hang from a shared line, so the tallest child is not
+        // the row's height when its baseline is higher than the row's.
+        let baselineRow = self.nodes[index].alignment == .Baseline && horizontal
+        var aboveBaseline = 0.0
+        var belowBaseline = 0.0
+        var width = 0.0
+        var height = 0.0
+        for i in 0..childCount {
+            let childIndex = firstChild + i
+            let childWidth = contentExtent(
+                childOuter: self.nodes[childIndex].outerWidth(),
+                child: self.nodes[childIndex].width,
+                parentUsesContent: usesContentW
+            )
+            let childHeight = contentExtent(
+                childOuter: self.nodes[childIndex].outerHeight(),
+                child: self.nodes[childIndex].height,
+                parentUsesContent: usesContentH
+            )
+            if horizontal {
+                width = width + childWidth
+                height = height > childHeight ? height : childHeight
+                if baselineRow {
+                    let childBaseline = self.nodeBaseline(index: childIndex)
+                    if childBaseline > 0.0 {
+                        let drop = nonNegative(value: childHeight - childBaseline)
+                        aboveBaseline = aboveBaseline > childBaseline ? aboveBaseline : childBaseline
+                        belowBaseline = belowBaseline > drop ? belowBaseline : drop
+                    }
+                }
+            } else {
+                width = width > childWidth ? width : childWidth
+                height = height + childHeight
+            }
+        }
+        // Only when something in the row actually reported a line: a row of nothing
+        // but fills has no baseline, and its height is the tallest child as always.
+        if baselineRow && aboveBaseline > 0.0 {
+            let stacked = aboveBaseline + belowBaseline
+            height = height > stacked ? height : stacked
+        }
+        if childCount > 1 {
+            if horizontal {
+                width = width + repeatedSpacing(count: childCount, spacing: spacing)
+            } else {
+                height = height + repeatedSpacing(count: childCount, spacing: spacing)
+            }
+        }
+        return Size(width: width, height: height)
+    }
+
+    function absoluteContentSize(index: Number) -> Size {
+        let childCount = self.nodes[index].childCount
+        let firstChild = self.nodes[index].firstChild
+        let usesContentW = self.nodes[index].width.usesContent()
+        let usesContentH = self.nodes[index].height.usesContent()
+        var width = 0.0
+        var height = 0.0
+        for i in 0..childCount {
+            let childIndex = firstChild + i
+            let childWidth = contentExtent(
+                childOuter: self.nodes[childIndex].outerRight(),
+                child: self.nodes[childIndex].width,
+                parentUsesContent: usesContentW
+            )
+            let childHeight = contentExtent(
+                childOuter: self.nodes[childIndex].outerBottom(),
+                child: self.nodes[childIndex].height,
+                parentUsesContent: usesContentH
+            )
             width = width > childWidth ? width : childWidth
-            height = height + childHeight
+            height = height > childHeight ? height : childHeight
         }
-        i = i + 1
+        return Size(width: width, height: height)
     }
-    // Only when something in the row actually reported a line: a row of nothing
-    // but fills has no baseline, and its height is the tallest child as always.
-    if baselineRow && aboveBaseline > 0.0 {
-        let stacked = aboveBaseline + belowBaseline
-        height = height > stacked ? height : stacked
-    }
-    if childCount > 1 {
-        if axisCode == 1 {
-            width = width + repeatedSpacing(count: childCount, spacing: spacing)
-        } else {
-            height = height + repeatedSpacing(count: childCount, spacing: spacing)
+
+    function overlayContentSize(index: Number) -> Size {
+        let childCount = self.nodes[index].childCount
+        let firstChild = self.nodes[index].firstChild
+        let usesContentW = self.nodes[index].width.usesContent()
+        let usesContentH = self.nodes[index].height.usesContent()
+        var width = 0.0
+        var height = 0.0
+        for i in 0..childCount {
+            let childIndex = firstChild + i
+            let childWidth = contentExtent(
+                childOuter: self.nodes[childIndex].outerWidth(),
+                child: self.nodes[childIndex].width,
+                parentUsesContent: usesContentW
+            )
+            let childHeight = contentExtent(
+                childOuter: self.nodes[childIndex].outerHeight(),
+                child: self.nodes[childIndex].height,
+                parentUsesContent: usesContentH
+            )
+            width = width > childWidth ? width : childWidth
+            height = height > childHeight ? height : childHeight
         }
+        return Size(width: width, height: height)
     }
-    return Size(width: width, height: height)
-}
 
-public function layoutEngineComputeAbsoluteContentSize(tree: borrow LayoutTree, index: Int) -> Size {
-    let childCount = tree.nodes[index].childCount
-    let firstChild = tree.nodes[index].firstChild
-    let usesContentW = layoutEngineSizeModeUsesContent(kind: tree.nodes[index].wKind)
-    let usesContentH = layoutEngineSizeModeUsesContent(kind: tree.nodes[index].hKind)
-    var width = 0.0
-    var height = 0.0
-    var i = 0
-    while i < childCount {
-        let childIndex = firstChild + i
-        let childWidth = layoutEngineContentExtent(childOuter: outerRight(node: tree.nodes[childIndex]), childKind: tree.nodes[childIndex].wKind, parentUsesContent: usesContentW)
-        let childHeight = layoutEngineContentExtent(childOuter: outerBottom(node: tree.nodes[childIndex]), childKind: tree.nodes[childIndex].hKind, parentUsesContent: usesContentH)
-        width = width > childWidth ? width : childWidth
-        height = height > childHeight ? height : childHeight
-        i = i + 1
-    }
-    return Size(width: width, height: height)
-}
-
-public function layoutEngineComputeOverlayContentSize(tree: borrow LayoutTree, index: Int) -> Size {
-    let childCount = tree.nodes[index].childCount
-    let firstChild = tree.nodes[index].firstChild
-    let usesContentW = layoutEngineSizeModeUsesContent(kind: tree.nodes[index].wKind)
-    let usesContentH = layoutEngineSizeModeUsesContent(kind: tree.nodes[index].hKind)
-    var width = 0.0
-    var height = 0.0
-    var i = 0
-    while i < childCount {
-        let childIndex = firstChild + i
-        let childWidth = layoutEngineContentExtent(childOuter: outerWidth(node: tree.nodes[childIndex]), childKind: tree.nodes[childIndex].wKind, parentUsesContent: usesContentW)
-        let childHeight = layoutEngineContentExtent(childOuter: outerHeight(node: tree.nodes[childIndex]), childKind: tree.nodes[childIndex].hKind, parentUsesContent: usesContentH)
-        width = width > childWidth ? width : childWidth
-        height = height > childHeight ? height : childHeight
-        i = i + 1
-    }
-    return Size(width: width, height: height)
-}
-
-public function layoutEngineComputeGridContentSize(tree: borrow LayoutTree, index: Int) -> Size {
-    let columns = tree.nodes[index].columns
-    if columns <= 0 {
-        return Size(width: 0.0, height: 0.0)
-    }
-    let childCount = tree.nodes[index].childCount
-    let firstChild = tree.nodes[index].firstChild
-    let spacing = tree.nodes[index].spacing
-    let rowSpacing = tree.nodes[index].rowSpacing
-    let usesContentW = layoutEngineSizeModeUsesContent(kind: tree.nodes[index].wKind)
-    let usesContentH = layoutEngineSizeModeUsesContent(kind: tree.nodes[index].hKind)
-    var maxCellWidth = 0.0
-    var totalHeight = 0.0
-    var rowHeight = 0.0
-    var i = 0
-    while i < childCount {
-        let childIndex = firstChild + i
-        let childWidth = layoutEngineContentExtent(childOuter: outerWidth(node: tree.nodes[childIndex]), childKind: tree.nodes[childIndex].wKind, parentUsesContent: usesContentW)
-        let childHeight = layoutEngineContentExtent(childOuter: outerHeight(node: tree.nodes[childIndex]), childKind: tree.nodes[childIndex].hKind, parentUsesContent: usesContentH)
-        let column = i % columns
-        maxCellWidth = maxCellWidth > childWidth ? maxCellWidth : childWidth
-        rowHeight = rowHeight > childHeight ? rowHeight : childHeight
-        if column == columns - 1 || i == childCount - 1 {
-            totalHeight = totalHeight + rowHeight
-            rowHeight = 0.0
+    function gridContentSize(index: Number) -> Size {
+        let columns = self.nodes[index].columns
+        if columns <= 0 {
+            return Size(width: 0.0, height: 0.0)
         }
-        i = i + 1
-    }
-    let usedColumns = childCount < columns ? childCount : columns
-    var totalWidth = 0.0
-    if usedColumns > 0 {
-        totalWidth = maxCellWidth * intAsFloat(value: usedColumns)
-        totalWidth = totalWidth + repeatedSpacing(count: usedColumns, spacing: spacing)
-    }
-    let rowCount = childCount == 0 ? 0 : ((childCount - 1) / columns) + 1
-    totalHeight = totalHeight + repeatedSpacing(count: rowCount, spacing: rowSpacing)
-    return Size(width: totalWidth, height: totalHeight)
-}
-
-public function layoutEngineComputeWrapContentSize(tree: borrow LayoutTree, index: Int, available: borrow Size) -> Size {
-    let childCount = tree.nodes[index].childCount
-    let firstChild = tree.nodes[index].firstChild
-    let spacing = tree.nodes[index].spacing
-    let rowSpacing = tree.nodes[index].rowSpacing
-    let usesContentW = layoutEngineSizeModeUsesContent(kind: tree.nodes[index].wKind)
-    let usesContentH = layoutEngineSizeModeUsesContent(kind: tree.nodes[index].hKind)
-    var width = 0.0
-    var height = 0.0
-    var lineWidth = 0.0
-    var lineHeight = 0.0
-    var i = 0
-    while i < childCount {
-        let childIndex = firstChild + i
-        let childWidth = layoutEngineContentExtent(childOuter: outerWidth(node: tree.nodes[childIndex]), childKind: tree.nodes[childIndex].wKind, parentUsesContent: usesContentW)
-        let childHeight = layoutEngineContentExtent(childOuter: outerHeight(node: tree.nodes[childIndex]), childKind: tree.nodes[childIndex].hKind, parentUsesContent: usesContentH)
-        let proposedWidth = lineWidth == 0.0 ? childWidth : lineWidth + spacing + childWidth
-        if lineWidth > 0.0 && proposedWidth > available.width {
-            width = width > lineWidth ? width : lineWidth
-            height = height + lineHeight + rowSpacing
-            lineWidth = childWidth
-            lineHeight = childHeight
-        } else {
-            lineWidth = proposedWidth
-            lineHeight = lineHeight > childHeight ? lineHeight : childHeight
+        let childCount = self.nodes[index].childCount
+        let firstChild = self.nodes[index].firstChild
+        let spacing = self.nodes[index].spacing
+        let rowSpacing = self.nodes[index].rowSpacing
+        let usesContentW = self.nodes[index].width.usesContent()
+        let usesContentH = self.nodes[index].height.usesContent()
+        var maxCellWidth = 0.0
+        var totalHeight = 0.0
+        var rowHeight = 0.0
+        for i in 0..childCount {
+            let childIndex = firstChild + i
+            let childWidth = contentExtent(
+                childOuter: self.nodes[childIndex].outerWidth(),
+                child: self.nodes[childIndex].width,
+                parentUsesContent: usesContentW
+            )
+            let childHeight = contentExtent(
+                childOuter: self.nodes[childIndex].outerHeight(),
+                child: self.nodes[childIndex].height,
+                parentUsesContent: usesContentH
+            )
+            let column = i % columns
+            maxCellWidth = maxCellWidth > childWidth ? maxCellWidth : childWidth
+            rowHeight = rowHeight > childHeight ? rowHeight : childHeight
+            if column == columns - 1 || i == childCount - 1 {
+                totalHeight = totalHeight + rowHeight
+                rowHeight = 0.0
+            }
         }
-        i = i + 1
+        let usedColumns = childCount < columns ? childCount : columns
+        var totalWidth = 0.0
+        if usedColumns > 0 {
+            totalWidth = maxCellWidth * Number(usedColumns)
+            totalWidth = totalWidth + repeatedSpacing(count: usedColumns, spacing: spacing)
+        }
+        let rowCount = childCount == 0 ? 0 : trunc((childCount - 1) / columns) + 1
+        totalHeight = totalHeight + repeatedSpacing(count: rowCount, spacing: rowSpacing)
+        return Size(width: totalWidth, height: totalHeight)
     }
-    width = width > lineWidth ? width : lineWidth
-    height = height + lineHeight
-    return Size(width: width, height: height)
+
+    function wrapContentSize(index: Number, available: borrow Size) -> Size {
+        let childCount = self.nodes[index].childCount
+        let firstChild = self.nodes[index].firstChild
+        let spacing = self.nodes[index].spacing
+        let rowSpacing = self.nodes[index].rowSpacing
+        let usesContentW = self.nodes[index].width.usesContent()
+        let usesContentH = self.nodes[index].height.usesContent()
+        var width = 0.0
+        var height = 0.0
+        var lineWidth = 0.0
+        var lineHeight = 0.0
+        for i in 0..childCount {
+            let childIndex = firstChild + i
+            let childWidth = contentExtent(
+                childOuter: self.nodes[childIndex].outerWidth(),
+                child: self.nodes[childIndex].width,
+                parentUsesContent: usesContentW
+            )
+            let childHeight = contentExtent(
+                childOuter: self.nodes[childIndex].outerHeight(),
+                child: self.nodes[childIndex].height,
+                parentUsesContent: usesContentH
+            )
+            let proposedWidth = lineWidth == 0.0 ? childWidth : lineWidth + spacing + childWidth
+            if lineWidth > 0.0 && proposedWidth > available.width {
+                width = width > lineWidth ? width : lineWidth
+                height = height + lineHeight + rowSpacing
+                lineWidth = childWidth
+                lineHeight = childHeight
+            } else {
+                lineWidth = proposedWidth
+                lineHeight = lineHeight > childHeight ? lineHeight : childHeight
+            }
+        }
+        width = width > lineWidth ? width : lineWidth
+        height = height + lineHeight
+        return Size(width: width, height: height)
+    }
 }

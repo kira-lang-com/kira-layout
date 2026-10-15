@@ -1,59 +1,59 @@
 import Foundation
-/// Utility functions for geometry operations
-public function pointDistance(p1: borrow Point, p2: borrow Point) -> Float {
-    let dx = p1.x - p2.x
-    let dy = p1.y - p2.y
-    let adx = dx < 0.0 ? 0.0 - dx : dx
-    let ady = dy < 0.0 ? 0.0 - dy : dy
-    return adx + ady
+
+// Geometry the layout engine asks of Foundation's points, sizes and rectangles.
+
+extend Point {
+    // How far `other` is along the axes, summed: the taxicab distance.
+    function manhattanDistance(other: borrow Point) -> Number {
+        return abs(x - other.x) + abs(y - other.y)
+    }
+
+    function offset(dx: Number, dy: Number) -> Point {
+        return Point(x: self.x + dx, y: self.y + dy)
+    }
 }
 
-public function pointOffset(p: borrow Point, dx: Float, dy: Float) -> Point {
-    return Point(x: p.x + dx, y: p.y + dy)
+extend Size {
+    function area() -> Number {
+        return self.width * self.height
+    }
+
+    function scaled(factor: Number) -> Size {
+        return Size(width: self.width * factor, height: self.height * factor)
+    }
 }
 
-public function sizeArea(s: borrow Size) -> Float {
-    return s.width * s.height
+extend Rect {
+    function center() -> Point {
+        return Point(x: self.x + self.width / 2.0, y: self.y + self.height / 2.0)
+    }
+
+    function intersects(other: borrow Rect) -> Bool {
+        return self.x < other.maxX() && self.maxX() > other.x && self.y < other.maxY() && self.maxY() > other.y
+    }
+
+    function inset(by: borrow EdgeInsets) -> Rect {
+        let insetWidth = (self.width - by.leading) - by.trailing
+        let insetHeight = (self.height - by.top) - by.bottom
+        return Rect(
+            x: self.x + by.leading,
+            y: self.y + by.top,
+            width: insetWidth,
+            height: insetHeight
+        )
+    }
 }
 
-public function sizeScale(s: borrow Size, factor: Float) -> Size {
-    return Size(width: s.width * factor, height: s.height * factor)
-}
+extend EdgeInsets {
+    function horizontalTotal() -> Number {
+        return self.leading + self.trailing
+    }
 
-public function rectRight(r: borrow Rect) -> Float {
-    return r.x + r.width
-}
+    function verticalTotal() -> Number {
+        return self.top + self.bottom
+    }
 
-public function rectBottom(r: borrow Rect) -> Float {
-    return r.y + r.height
-}
-
-public function rectCenter(r: borrow Rect) -> Point {
-    return Point(x: r.x + r.width / 2.0, y: r.y + r.height / 2.0)
-}
-
-public function rectContains(r: borrow Rect, point: borrow Point) -> Bool {
-    return point.x >= r.x && point.x <= rectRight(r: r) && point.y >= r.y && point.y <= rectBottom(r: r)
-}
-
-public function rectIntersects(r: borrow Rect, other: borrow Rect) -> Bool {
-    return r.x < rectRight(r: other) && rectRight(r: r) > other.x && r.y < rectBottom(r: other) && rectBottom(r: r) > other.y
-}
-
-public function rectInset(r: borrow Rect, by: borrow EdgeInsets) -> Rect {
-    let insetWidth = (r.width - by.leading) - by.trailing
-    let insetHeight = (r.height - by.top) - by.bottom
-    return Rect(x: r.x + by.leading, y: r.y + by.top, width: insetWidth, height: insetHeight)
-}
-
-public function edgeInsetsHorizontalTotal(insets: borrow EdgeInsets) -> Float {
-    return insets.leading + insets.trailing
-}
-
-public function edgeInsetsVerticalTotal(insets: borrow EdgeInsets) -> Float {
-    return insets.top + insets.bottom
-}
-
-public function edgeInsetsTotal(insets: borrow EdgeInsets) -> Float {
-    return edgeInsetsHorizontalTotal(insets: insets) + edgeInsetsVerticalTotal(insets: insets)
+    function total() -> Number {
+        return self.horizontalTotal() + self.verticalTotal()
+    }
 }

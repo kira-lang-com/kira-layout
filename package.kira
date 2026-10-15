@@ -1,7 +1,4 @@
-Package KiraLayout {
-    let version = "0.1.0"
-    let kira = "0.1.0"
-    let kind = PackageKind.Library
-    let moduleRoot = "KiraLayout"
-    let defaults = Defaults { executionMode: Backend.Llvm, buildTarget: BuildTarget.Host }
+construct KiraLayout extends Package {
+    let version: String = "0.1.0"
+    let kind: PackageKind = .Library
 }
