@@ -1,0 +1,301 @@
+//! Tests for the layout model: size mode comparison, descriptor equality, flattening and dirty tracking.
+import Foundation
+import KiraLayout
+
+// The layout model: size-mode and descriptor equality, the flat tree's structure,
+// dirty propagation, and the retained cache that skips work on a second pass.
+// Subject: app/Layout/Model.kira.
+
+@Test
+function sizeModeEqualsComparesKindAndValue() {
+    expect!((SizeMode.Fixed(40.0).equals(b: .Fixed(40.0))) == (true))
+    expect!((SizeMode.Fixed(40.0).equals(b: .Fixed(41.0))) == (false))
+    expect!((SizeMode.Fixed(40.0).equals(b: .Fill)) == (false))
+    expect!((SizeMode.Fill.equals(b: .Fill)) == (true))
+    // Hug and Fill both have value 0, so only the kind tells them apart.
+    expect!((SizeMode.Hug.equals(b: .Fill)) == (false))
+    expect!((SizeMode.Min(10.0).equals(b: .Max(10.0))) == (false))
+    expect!((SizeMode.Fraction(0.5).equals(b: .Fraction(0.5))) == (true))
+    expect!((SizeMode.Reveal(0.5).equals(b: .Fraction(0.5))) == (false))
+}
+
+@Test
+function sizeModeValueCarriesTheNumberOfTheCase() {
+    expect!((SizeMode.Fixed(7.0).value()) == (7.0))
+    expect!((SizeMode.Max(9.0).value()) == (9.0))
+    expect!((SizeMode.Fraction(0.5).value()) == (0.5))
+    expect!((SizeMode.Reveal(0.25).value()) == (0.25))
+    expect!((SizeMode.Fill.value()) == (0.0))
+    expect!((SizeMode.Hug.value()) == (0.0))
+}
+
+@Test
+function sizeModeIsFixedOnlyForFixed() {
+    expect!((SizeMode.Fixed(1.0).isFixed()) == (true))
+    expect!((SizeMode.Fill.isFixed()) == (false))
+    expect!((SizeMode.Hug.isFixed()) == (false))
+    expect!((SizeMode.Fraction(0.5).isFixed()) == (false))
+    expect!((SizeMode.Min(1.0).isFixed()) == (false))
+    expect!((SizeMode.Max(1.0).isFixed()) == (false))
+    expect!((SizeMode.Reveal(0.5).isFixed()) == (false))
+}
+
+@Test
+function edgeInsetsEqualsComparesEveryEdge() {
+    let base = EdgeInsets(top: 1.0, trailing: 2.0, bottom: 3.0, leading: 4.0)
+    expect!(
+        (base.equals(b: EdgeInsets(top: 1.0, trailing: 2.0, bottom: 3.0, leading: 4.0))) == (true)
+    )
+    expect!(
+        (base.equals(b: EdgeInsets(top: 9.0, trailing: 2.0, bottom: 3.0, leading: 4.0))) == (false)
+    )
+    expect!(
+        (base.equals(b: EdgeInsets(top: 1.0, trailing: 9.0, bottom: 3.0, leading: 4.0))) == (false)
+    )
+    expect!(
+        (base.equals(b: EdgeInsets(top: 1.0, trailing: 2.0, bottom: 9.0, leading: 4.0))) == (false)
+    )
+    expect!(
+        (base.equals(b: EdgeInsets(top: 1.0, trailing: 2.0, bottom: 3.0, leading: 9.0))) == (false)
+    )
+}
+
+// Equality covers every field of the descriptor: changing any one of them makes
+// two descriptors produce different layouts.
+@Test
+function layoutDescriptorEqualsComparesEveryField() {
+    let base = leafDescriptor(width: .Fixed(10.0), height: .Fixed(20.0))
+    expect!((base.equals(b: base)) == (true))
+
+    var width = leafDescriptor(width: .Fill, height: .Fixed(20.0))
+    expect!((base.equals(b: width)) == (false))
+
+    var zIndex = leafDescriptor(width: .Fixed(10.0), height: .Fixed(20.0))
+    zIndex.zIndex = 1
+    expect!((base.equals(b: zIndex)) == (false))
+
+    var offsetX = leafDescriptor(width: .Fixed(10.0), height: .Fixed(20.0))
+    offsetX.x = 1.0
+    expect!((base.equals(b: offsetX)) == (false))
+
+    var clipped = leafDescriptor(width: .Fixed(10.0), height: .Fixed(20.0))
+    clipped.clipContent = true
+    expect!((base.equals(b: clipped)) == (false))
+
+    var leadingPadding = leafDescriptor(width: .Fixed(10.0), height: .Fixed(20.0))
+    leadingPadding.padding = EdgeInsets(top: 0.0, trailing: 0.0, bottom: 0.0, leading: 1.0)
+    expect!((base.equals(b: leadingPadding)) == (false))
+}
+
+// A node whose two axes are both fixed does not depend on the offer it gets.
+@Test
+function descriptorIsOfferIndependentOnlyWhenBothAxesAreFixed() {
+    expect!(
+        (leafDescriptor(width: .Fixed(10.0), height: .Fixed(20.0)).isOfferIndependent()) == (true)
+    )
+    expect!((leafDescriptor(width: .Fill, height: .Fixed(20.0)).isOfferIndependent()) == (false))
+    expect!((leafDescriptor(width: .Fixed(10.0), height: .Hug).isOfferIndependent()) == (false))
+}
+
+// Flattening copies the descriptor into the node's scalars, and derives the
+// offer-independence flag from the two size modes.
+@Test
+function flattenCopiesTheDescriptorIntoTheNode() {
+    var desc = leafDescriptor(width: .Fixed(10.0), height: .Fixed(20.0))
+    desc.padding = EdgeInsets(top: 1.0, trailing: 2.0, bottom: 3.0, leading: 4.0)
+    desc.margin = EdgeInsets(top: 5.0, trailing: 6.0, bottom: 7.0, leading: 8.0)
+    var node = LayoutNode(firstChild: 0, childCount: 0)
+    node.flatten(desc: desc)
+    expect!((node.padT) == (1.0))
+    expect!((node.padR) == (2.0))
+    expect!((node.padB) == (3.0))
+    expect!((node.padL) == (4.0))
+    expect!((node.marT) == (5.0))
+    expect!((node.marL) == (8.0))
+    expect!((node.offerIndependent) == (true))
+
+    let flexible = leafDescriptor(width: .Fill, height: .Fixed(20.0))
+    node.flatten(desc: flexible)
+    expect!((node.offerIndependent) == (false))
+}
+
+// Node 0 is the root; nodes 1 and 2 are its children; 3 is under 1, 4 under 2.
+@Test
+function parentIndicesMapEachChildToItsParent() {
+    let tree = retainedTree()
+    let parents = tree.parentIndices()
+    expect!(!parents[0].isSome())
+    expect!(parentOf(parents[1]) == 0)
+    expect!(parentOf(parents[2]) == 0)
+    expect!(parentOf(parents[3]) == 1)
+    expect!(parentOf(parents[4]) == 2)
+}
+
+// The index of a node's parent, or -1 when the node is the root or detached.
+function parentOf(parent: Number?) -> Number {
+    return match parent {
+        Some(index) -> index
+        None -> -1
+    }
+}
+
+@Test
+function structureMatchesOnlyForTheSameChildSpans() {
+    let tree = retainedTree()
+    expect!((tree.structureMatches(b: retainedTree())) == (true))
+    var reshaped = retainedTree()
+    reshaped.nodes[1].childCount = 0
+    expect!((tree.structureMatches(b: reshaped)) == (false))
+}
+
+// A change marks its own node and every ancestor dirty, and nothing else.
+@Test
+function propagateDirtyMarksTheChangedNodeAndItsAncestorsOnly() {
+    var tree = retainedTree()
+    tree.propagateDirty(selfChanged: [false, false, false, true, false])
+    expect!((tree.nodes[0].subtreeDirty) == (true))
+    expect!((tree.nodes[1].subtreeDirty) == (true))
+    expect!((tree.nodes[2].subtreeDirty) == (false))
+    expect!((tree.nodes[3].subtreeDirty) == (true))
+    expect!((tree.nodes[4].subtreeDirty) == (false))
+}
+
+// Flags shorter than the node list leave the nodes past them clean.
+@Test
+function propagateDirtyTreatsMissingFlagsAsClean() {
+    var tree = retainedTree()
+    tree.propagateDirty(selfChanged: [false, false, false, true])
+    expect!((tree.nodes[2].subtreeDirty) == (false))
+    expect!((tree.nodes[4].subtreeDirty) == (false))
+    expect!((tree.nodes[3].subtreeDirty) == (true))
+}
+
+@Test
+function propagateDirtyWithNoChangesCleansEveryNode() {
+    var tree = retainedTree()
+    tree.markAllDirty()
+    tree.propagateDirty(selfChanged: [false, false, false, false, false])
+    expect!((tree.nodes[0].subtreeDirty) == (false))
+    expect!((tree.nodes[3].subtreeDirty) == (false))
+    expect!((tree.nodes[4].subtreeDirty) == (false))
+}
+
+@Test
+function markAllDirtyAndMarkAllCleanSetEveryNode() {
+    var tree = retainedTree()
+    tree.markAllDirty()
+    expect!((tree.nodes[0].subtreeDirty) == (true))
+    expect!((tree.nodes[4].subtreeDirty) == (true))
+    tree.markAllClean()
+    expect!((tree.nodes[0].subtreeDirty) == (false))
+    expect!((tree.nodes[4].subtreeDirty) == (false))
+}
+
+@Test
+function frameReadsTheOriginAndTheMeasuredSize() {
+    let laid = laidOut(tree: retainedTree(), available: retainedAvailable())
+    expect!(
+        (framesEqual(laid.frame(0), Rect(x: 0.0, y: 0.0, width: 200.0, height: 200.0))) == (true)
+    )
+    expect!(
+        (framesEqual(laid.frame(4), Rect(x: 0.0, y: 40.0, width: 30.0, height: 20.0))) == (true)
+    )
+}
+
+// A first pass over a fresh tree computes all five nodes and reuses none.
+@Test
+function firstPassComputesEveryNodeAndReusesNone() {
+    let laid = laidOut(tree: retainedTree(), available: retainedAvailable())
+    expect!((laid.measureComputes) == (5.0))
+    expect!((laid.measureSkips) == (0.0))
+    expect!((laid.placeComputes) == (5.0))
+    expect!((laid.placeSkips) == (0.0))
+}
+
+@Test
+function resetCountersZeroesEveryCounter() {
+    let laid = laidOut(tree: retainedTree(), available: retainedAvailable())
+    let cleared = laid.resetCounters()
+    expect!((cleared.measureComputes) == (0.0))
+    expect!((cleared.measureSkips) == (0.0))
+    expect!((cleared.placeComputes) == (0.0))
+    expect!((cleared.placeSkips) == (0.0))
+}
+
+// Nothing changed, so the root's cache answers the whole pass: one measure skip
+// and one place skip, and no node is recomputed.
+@Test
+function unchangedPassRecomputesNothing() {
+    let (before, after) = unchangedPasses()
+    expect!((after.measureComputes) == (0.0))
+    expect!((after.placeComputes) == (0.0))
+    expect!((after.measureSkips) == (1.0))
+    expect!((after.placeSkips) == (1.0))
+    expect!((framesEqual(after.frame(1), before.frame(1))) == (true))
+}
+
+// The leaf is replaced by a 40 x 20 one and the pass takes that size.
+@Test
+function changedLeafTakesItsNewSize() {
+    let (before, after) = changedLeafPasses()
+    expect!((after.frame(3).width) == (40.0))
+    expect!((after.frame(3).height) == (20.0))
+    expect!((before.frame(3).width) == (30.0))
+}
+
+// The subtree under node 2 is clean, so it keeps the geometry it had.
+@Test
+function changedLeafLeavesTheSiblingSubtreeWhereItWas() {
+    let (before, after) = changedLeafPasses()
+    expect!((framesEqual(after.frame(2), before.frame(2))) == (true))
+    expect!((framesEqual(after.frame(4), before.frame(4))) == (true))
+}
+
+// The parent of the changed leaf is fixed, so its own size does not change.
+@Test
+function changedLeafLeavesTheParentSizeAlone() {
+    let (before, after) = changedLeafPasses()
+    expect!((framesEqual(after.frame(1), before.frame(1))) == (true))
+}
+
+// The changed leaf, its parent and the root are recomputed; the untouched sibling
+// subtree is reused at node 2, and nothing under it is visited.
+@Test
+function changedLeafRecomputesOnlyItsAncestorsAndItself() {
+    let (before, after) = changedLeafPasses()
+    expect!((after.measureComputes) == (3.0))
+    expect!((after.measureSkips) == (1.0))
+    expect!((after.placeComputes) == (3.0))
+    expect!((after.placeSkips) == (1.0))
+}
+
+function retainedAvailable() -> Size {
+    return Size(width: 200.0, height: 200.0)
+}
+
+// Runs a second pass over a laid-out tree and returns it with fresh counters.
+function secondPass(tree: LayoutTree) -> LayoutTree {
+    var counted = tree.resetCounters()
+    counted.measure(index: 0, available: retainedAvailable())
+    counted.place(index: 0, origin: Point(x: 0.0, y: 0.0))
+    return counted
+}
+
+// Lays a tree out, marks every node clean without changing it, and runs a second
+// pass. Returns the first layout and the counted second pass.
+function unchangedPasses() -> (LayoutTree, LayoutTree) {
+    let before = laidOut(tree: retainedTree(), available: retainedAvailable())
+    var edited = copy before
+    edited.propagateDirty(selfChanged: [false, false, false, false, false])
+    return (before, secondPass(tree: edited))
+}
+
+// Lays a tree out, replaces leaf 3 with a 40 x 20 leaf, marks only that leaf
+// dirty, and runs a second pass. Returns the first layout and the counted second pass.
+function changedLeafPasses() -> (LayoutTree, LayoutTree) {
+    let before = laidOut(tree: retainedTree(), available: retainedAvailable())
+    var edited = copy before
+    edited.nodes[3] = fixedLeaf(width: 40.0, height: 20.0)
+    edited.propagateDirty(selfChanged: [false, false, false, true, false])
+    return (before, secondPass(tree: edited))
+}

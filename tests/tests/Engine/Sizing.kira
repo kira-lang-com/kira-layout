@@ -1,0 +1,202 @@
+//! Tests for the sizing rules: offers to children, outer extents and stack spacing.
+import Foundation
+import KiraLayout
+
+// Sizing helpers that turn a parent's offer into the space each child may use.
+// Subject: app/Engine/Sizing.kira.
+
+@Test
+function nonNegativeClampsBelowZero() {
+    expect!((nonNegative(value: -3.0)) == (0.0))
+    expect!((nonNegative(value: 0.0)) == (0.0))
+    expect!((nonNegative(value: 4.0)) == (4.0))
+}
+
+// Spacing sits between children, so n children have n - 1 gaps.
+@Test
+function repeatedSpacingCountsTheGapsBetweenChildren() {
+    expect!((repeatedSpacing(count: 0, spacing: 8.0)) == (0.0))
+    expect!((repeatedSpacing(count: 1, spacing: 8.0)) == (0.0))
+    expect!((repeatedSpacing(count: 3, spacing: 8.0)) == (16.0))
+}
+
+@Test
+function outerExtentsIncludeMarginsAndOffset() {
+    var node = LayoutNode(firstChild: 0, childCount: 0)
+    node.measuredW = 10.0
+    node.measuredH = 8.0
+    node.marL = 2.0
+    node.marR = 3.0
+    node.marT = 1.0
+    node.marB = 4.0
+    node.dx = 5.0
+    node.dy = 6.0
+    expect!((node.outerWidth()) == (15.0))
+    expect!((node.outerHeight()) == (13.0))
+    expect!((node.outerRight()) == (20.0))
+    expect!((node.outerBottom()) == (19.0))
+}
+
+// What a child may take on one axis, for each size mode, in a 300 point parent.
+@Test
+function constrainedChildAxisOfferFollowsTheSizeMode() {
+    expect!((constrainedChildAxisOffer(parentAvailable: 300.0, mode: .Fixed(40.0))) == (40.0))
+    expect!((constrainedChildAxisOffer(parentAvailable: 300.0, mode: .Fixed(-5.0))) == (0.0))
+    expect!((constrainedChildAxisOffer(parentAvailable: 300.0, mode: .Fill)) == (300.0))
+    expect!((constrainedChildAxisOffer(parentAvailable: 300.0, mode: .Fraction(0.5))) == (150.0))
+    expect!((constrainedChildAxisOffer(parentAvailable: 300.0, mode: .Min(400.0))) == (400.0))
+    expect!((constrainedChildAxisOffer(parentAvailable: 300.0, mode: .Min(100.0))) == (300.0))
+    expect!((constrainedChildAxisOffer(parentAvailable: 300.0, mode: .Max(200.0))) == (200.0))
+    expect!((constrainedChildAxisOffer(parentAvailable: 300.0, mode: .Max(500.0))) == (300.0))
+    expect!((constrainedChildAxisOffer(parentAvailable: 300.0, mode: .Hug)) == (300.0))
+    expect!((constrainedChildAxisOffer(parentAvailable: 300.0, mode: .Reveal(0.5))) == (300.0))
+}
+
+// A row of three children with 10 between them, and a child with 2 + 3 across.
+@Test
+function horizontalStackOfferLosesSpacingAndChildMargins() {
+    let parent = stack(
+        width: .Fill,
+        height: .Fill,
+        axis: .Horizontal,
+        alignment: .Start,
+        spacing: 10.0,
+        padding: zeroInsets(),
+        firstChild: 1,
+        childCount: 3
+    )
+    var child = LayoutNode(firstChild: 0, childCount: 0)
+    child.marL = 2.0
+    child.marR = 3.0
+    child.marT = 1.0
+    child.marB = 1.0
+    let offer = childAvailableSize(
+        parentAvailable: Size(width: 300.0, height: 200.0),
+        parent: parent,
+        child: child,
+        childCount: 3
+    )
+    expect!((offer.width) == (275.0))
+    expect!((offer.height) == (198.0))
+}
+
+@Test
+function verticalStackOfferLosesSpacingAndChildMargins() {
+    let parent = stack(
+        width: .Fill,
+        height: .Fill,
+        axis: .Vertical,
+        alignment: .Start,
+        spacing: 10.0,
+        padding: zeroInsets(),
+        firstChild: 1,
+        childCount: 3
+    )
+    var child = LayoutNode(firstChild: 0, childCount: 0)
+    child.marL = 2.0
+    child.marR = 3.0
+    child.marT = 1.0
+    child.marB = 1.0
+    let offer = childAvailableSize(
+        parentAvailable: Size(width: 300.0, height: 200.0),
+        parent: parent,
+        child: child,
+        childCount: 3
+    )
+    expect!((offer.width) == (295.0))
+    expect!((offer.height) == (178.0))
+}
+
+// Gaps are only taken out when there is more than one child to put between.
+@Test
+function singleChildStackOfferHasNoSpacingToRemove() {
+    let parent = stack(
+        width: .Fill,
+        height: .Fill,
+        axis: .Horizontal,
+        alignment: .Start,
+        spacing: 10.0,
+        padding: zeroInsets(),
+        firstChild: 1,
+        childCount: 1
+    )
+    let child = LayoutNode(firstChild: 0, childCount: 0)
+    let offer = childAvailableSize(
+        parentAvailable: Size(width: 300.0, height: 200.0),
+        parent: parent,
+        child: child,
+        childCount: 1
+    )
+    expect!((offer.width) == (300.0))
+}
+
+// A child whose margins are wider than the space clamps to nothing, not below zero.
+@Test
+function childMarginsWiderThanTheOfferClampToZero() {
+    let parent = stack(
+        width: .Fill,
+        height: .Fill,
+        axis: .Horizontal,
+        alignment: .Start,
+        spacing: 0.0,
+        padding: zeroInsets(),
+        firstChild: 1,
+        childCount: 1
+    )
+    var child = LayoutNode(firstChild: 0, childCount: 0)
+    child.marL = 5.0
+    child.marR = 5.0
+    let offer = childAvailableSize(
+        parentAvailable: Size(width: 4.0, height: 4.0),
+        parent: parent,
+        child: child,
+        childCount: 1
+    )
+    expect!((offer.width) == (0.0))
+}
+
+// A grid of 3 columns with 10 between them: (320 - 20) / 3 per column, less the margins.
+@Test
+function gridOfferSharesTheWidthAcrossColumns() {
+    var grid = stack(
+        width: .Fill,
+        height: .Fill,
+        axis: .Horizontal,
+        alignment: .Start,
+        spacing: 10.0,
+        padding: zeroInsets(),
+        firstChild: 1,
+        childCount: 3
+    )
+    grid.arrange = .Grid
+    grid.columns = 3.0
+    var child = LayoutNode(firstChild: 0, childCount: 0)
+    child.marL = 2.0
+    child.marR = 3.0
+    let offer = childAvailableSize(
+        parentAvailable: Size(width: 320.0, height: 200.0),
+        parent: grid,
+        child: child,
+        childCount: 3
+    )
+    expect!((offer.width) == (95.0))
+}
+
+// An overlay child is offered the overlay's own fixed size, not the parent's.
+@Test
+function overlayOfferUsesTheOverlaysOwnSize() {
+    let overlay = overlayNode(width: .Fixed(50.0), height: .Fill, firstChild: 1, childCount: 1)
+    var child = LayoutNode(firstChild: 0, childCount: 0)
+    child.marL = 2.0
+    child.marR = 3.0
+    child.marT = 1.0
+    child.marB = 1.0
+    let offer = childAvailableSize(
+        parentAvailable: Size(width: 300.0, height: 200.0),
+        parent: overlay,
+        child: child,
+        childCount: 1
+    )
+    expect!((offer.width) == (45.0))
+    expect!((offer.height) == (198.0))
+}

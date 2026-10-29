@@ -1,0 +1,77 @@
+//! Geometry helpers the layout engine uses on Foundation's `Point`, `Size`, `Rect` and `EdgeInsets`.
+//!
+//! Each extension is the few operations layout needs, so the engine reads as arithmetic on rectangles
+//! rather than on loose scalars.
+import Foundation
+
+// Geometry the layout engine asks of Foundation's points, sizes and rectangles.
+
+extend Point {
+    /// The taxicab distance from this point to `other`: the sum of the absolute differences on each axis.
+    function manhattanDistance(other: borrow Point) -> Number {
+        return abs(x - other.x) + abs(y - other.y)
+    }
+
+    /// This point moved by `dx` along x and `dy` along y.
+    function offset(dx: Number, dy: Number) -> Point {
+        return Point(x: self.x + dx, y: self.y + dy)
+    }
+}
+
+extend Size {
+    /// The area of this size: `width` times `height`.
+    function area() -> Number {
+        return self.width * self.height
+    }
+
+    /// This size with both dimensions multiplied by `factor`.
+    function scaled(factor: Number) -> Size {
+        return Size(width: self.width * factor, height: self.height * factor)
+    }
+}
+
+extend Rect {
+    /// The centre point of this rectangle.
+    function center() -> Point {
+        return Point(x: self.x + self.width / 2.0, y: self.y + self.height / 2.0)
+    }
+
+    /// Whether this rectangle and `other` overlap with positive area.
+    ///
+    /// Rectangles that only touch along an edge do not intersect.
+    function intersects(other: borrow Rect) -> Bool {
+        return self.x < other.maxX() && self.maxX() > other.x && self.y < other.maxY() && self.maxY() > other.y
+    }
+
+    /// This rectangle shrunk by the edges in `by`.
+    ///
+    /// The result can have a negative size when the insets exceed the rectangle. Callers that need a bounded
+    /// size clamp it themselves.
+    function inset(by: borrow EdgeInsets) -> Rect {
+        let insetWidth = (self.width - by.leading) - by.trailing
+        let insetHeight = (self.height - by.top) - by.bottom
+        return Rect(
+            x: self.x + by.leading,
+            y: self.y + by.top,
+            width: insetWidth,
+            height: insetHeight
+        )
+    }
+}
+
+extend EdgeInsets {
+    /// The sum of the leading and trailing insets.
+    function horizontalTotal() -> Number {
+        return self.leading + self.trailing
+    }
+
+    /// The sum of the top and bottom insets.
+    function verticalTotal() -> Number {
+        return self.top + self.bottom
+    }
+
+    /// The sum of all four insets.
+    function total() -> Number {
+        return self.horizontalTotal() + self.verticalTotal()
+    }
+}

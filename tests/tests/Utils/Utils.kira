@@ -1,0 +1,142 @@
+//! Tests for the geometry extensions on Foundation's points, sizes, rectangles and insets.
+import Foundation
+import KiraLayout
+
+// Rectangle, point, size and inset arithmetic that every placement decision is
+// made in. Subject: app/Utils/Utils.kira.
+
+function sampleRect() -> Rect {
+    return Rect(x: 10.0, y: 20.0, width: 100.0, height: 60.0)
+}
+
+@Test
+function rectCenterIsTheMiddleOfTheRect() {
+    let rect = sampleRect()
+    let center = rect.center()
+    expect!((center.x) == (60.0))
+    expect!((center.y) == (50.0))
+}
+
+// A zero-size rectangle is its own centre.
+@Test
+function emptyRectCentreIsItsOrigin() {
+    let empty = Rect(x: 5.0, y: 7.0, width: 0.0, height: 0.0)
+    let center = empty.center()
+    expect!((center.x) == (5.0))
+    expect!((center.y) == (7.0))
+}
+
+@Test
+function insetShrinksByBothEdges() {
+    let rect = sampleRect()
+    let inset = rect.inset(by: EdgeInsets(top: 5.0, trailing: 10.0, bottom: 5.0, leading: 10.0))
+    expect!((inset.x) == (20.0))
+    expect!((inset.y) == (25.0))
+    expect!((inset.width) == (80.0))
+    expect!((inset.height) == (50.0))
+}
+
+@Test
+function zeroInsetLeavesTheRectUnchanged() {
+    let rect = sampleRect()
+    let inset = rect.inset(by: EdgeInsets(top: 0.0, trailing: 0.0, bottom: 0.0, leading: 0.0))
+    expect!((framesEqual(inset, rect)) == (true))
+}
+
+@Test
+function rectContainsItsOwnCentre() {
+    let rect = sampleRect()
+    let center = rect.center()
+    expect!((rect.contains(point: center)) == (true))
+}
+
+@Test
+function rectDoesNotContainPointsOutsideItsEdges() {
+    let rect = sampleRect()
+    expect!((rect.contains(point: Point(x: 111.0, y: 50.0))) == (false))
+    expect!((rect.contains(point: Point(x: 9.0, y: 50.0))) == (false))
+    expect!((rect.contains(point: Point(x: 50.0, y: 19.0))) == (false))
+    expect!((rect.contains(point: Point(x: 50.0, y: 85.0))) == (false))
+}
+
+@Test
+function overlappingRectsIntersect() {
+    let rect = sampleRect()
+    let overlapping = Rect(x: 100.0, y: 70.0, width: 40.0, height: 40.0)
+    expect!((rect.intersects(other: overlapping)) == (true))
+}
+
+@Test
+function rectIntersectsARectItLiesInside() {
+    let rect = sampleRect()
+    let inner = Rect(x: 20.0, y: 30.0, width: 10.0, height: 10.0)
+    expect!((rect.intersects(other: inner)) == (true))
+    expect!((rect.intersects(other: rect)) == (true))
+}
+
+@Test
+function separateRectsDoNotIntersect() {
+    let rect = sampleRect()
+    let separate = Rect(x: 200.0, y: 20.0, width: 40.0, height: 40.0)
+    expect!((rect.intersects(other: separate)) == (false))
+}
+
+// Edges that only touch share no area, so they do not intersect.
+@Test
+function rectsTouchingAtAnEdgeDoNotIntersect() {
+    let rect = sampleRect()
+    let touchingRight = Rect(x: 110.0, y: 20.0, width: 40.0, height: 40.0)
+    expect!((rect.intersects(other: touchingRight)) == (false))
+}
+
+@Test
+function manhattanDistanceSumsBothAxes() {
+    let origin = Point(x: 0.0, y: 0.0)
+    let other = Point(x: 3.0, y: -4.0)
+    expect!((origin.manhattanDistance(other: other)) == (7.0))
+    expect!((other.manhattanDistance(other: origin)) == (7.0))
+    expect!((origin.manhattanDistance(other: origin)) == (0.0))
+}
+
+@Test
+function pointOffsetMovesByTheGivenDelta() {
+    let point = Point(x: 1.0, y: 2.0)
+    let moved = point.offset(dx: 3.0, dy: -1.0)
+    expect!((moved.x) == (4.0))
+    expect!((moved.y) == (1.0))
+    let unchanged = point.offset(dx: 0.0, dy: 0.0)
+    expect!((unchanged.x) == (1.0))
+    expect!((unchanged.y) == (2.0))
+}
+
+@Test
+function sizeAreaIsWidthTimesHeight() {
+    let size = Size(width: 3.0, height: 4.0)
+    expect!((size.area()) == (12.0))
+    let flat = Size(width: 0.0, height: 9.0)
+    expect!((flat.area()) == (0.0))
+}
+
+@Test
+function sizeScalingMultipliesBothAxes() {
+    let size = Size(width: 3.0, height: 4.0)
+    let doubled = size.scaled(factor: 2.0)
+    expect!((doubled.width) == (6.0))
+    expect!((doubled.height) == (8.0))
+    let collapsed = size.scaled(factor: 0.0)
+    expect!((collapsed.area()) == (0.0))
+}
+
+@Test
+function edgeInsetTotalsAddOppositeEdges() {
+    let insets = EdgeInsets(top: 1.0, trailing: 2.0, bottom: 3.0, leading: 4.0)
+    expect!((insets.horizontalTotal()) == (6.0))
+    expect!((insets.verticalTotal()) == (4.0))
+    expect!((insets.total()) == (10.0))
+}
+
+@Test
+function zeroEdgeInsetsTotalNothing() {
+    let insets = EdgeInsets(top: 0.0, trailing: 0.0, bottom: 0.0, leading: 0.0)
+    expect!((insets.total()) == (0.0))
+}

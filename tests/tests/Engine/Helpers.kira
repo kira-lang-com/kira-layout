@@ -1,0 +1,200 @@
+//! Tests for the resolution helpers: size modes, cross-axis alignment and stack sizing.
+import Foundation
+import KiraLayout
+
+// Size resolution, stack sizing and alignment helpers. Subject:
+// app/Engine/Helpers.kira.
+
+// Fixed ignores the offer and the content; Fill takes the offer; Hug takes the
+// content; Fraction takes a share of the offer; Min and Max bound the content.
+@Test
+function sizeModeResolvesFromTheOfferOrTheContent() {
+    expect!((SizeMode.Fixed(40.0).resolve(available: 300.0, content: 10.0)) == (40.0))
+    expect!((SizeMode.Fixed(-5.0).resolve(available: 300.0, content: 10.0)) == (0.0))
+    expect!((SizeMode.Fill.resolve(available: 300.0, content: 10.0)) == (300.0))
+    expect!((SizeMode.Hug.resolve(available: 300.0, content: 10.0)) == (10.0))
+    expect!((SizeMode.Fraction(0.25).resolve(available: 300.0, content: 10.0)) == (75.0))
+    expect!((SizeMode.Min(100.0).resolve(available: 300.0, content: 60.0)) == (100.0))
+    expect!((SizeMode.Min(100.0).resolve(available: 300.0, content: 150.0)) == (150.0))
+    expect!((SizeMode.Max(100.0).resolve(available: 300.0, content: 60.0)) == (60.0))
+    expect!((SizeMode.Max(100.0).resolve(available: 300.0, content: 150.0)) == (100.0))
+    expect!((SizeMode.Reveal(0.5).resolve(available: 300.0, content: 60.0)) == (30.0))
+}
+
+// Padding is added to the content for the modes that measure content, and never
+// to a fixed or offered size.
+@Test
+function resolveOuterAddsPaddingOnlyToContentModes() {
+    expect!((SizeMode.Hug.resolveOuter(available: 300.0, content: 60.0, padding: 50.0)) == (110.0))
+    expect!(
+        (SizeMode.Min(100.0).resolveOuter(available: 300.0, content: 60.0, padding: 50.0)) == (
+            110.0
+        )
+    )
+    expect!(
+        (SizeMode.Max(100.0).resolveOuter(available: 300.0, content: 60.0, padding: 50.0)) == (
+            100.0
+        )
+    )
+    expect!(
+        (SizeMode.Reveal(0.5).resolveOuter(available: 300.0, content: 60.0, padding: 20.0)) == (
+            40.0
+        )
+    )
+    expect!(
+        (SizeMode.Fixed(40.0).resolveOuter(available: 300.0, content: 60.0, padding: 10.0)) == (
+            40.0
+        )
+    )
+    expect!((SizeMode.Fill.resolveOuter(available: 300.0, content: 60.0, padding: 10.0)) == (300.0))
+    expect!(
+        (SizeMode.Fraction(0.5).resolveOuter(available: 300.0, content: 60.0, padding: 10.0)) == (
+            150.0
+        )
+    )
+}
+
+@Test
+function usesContentIsTrueOnlyForModesMeasuredFromContent() {
+    expect!((SizeMode.Hug.usesContent()) == (true))
+    expect!((SizeMode.Min(1.0).usesContent()) == (true))
+    expect!((SizeMode.Max(1.0).usesContent()) == (true))
+    expect!((SizeMode.Reveal(0.5).usesContent()) == (true))
+    expect!((SizeMode.Fixed(1.0).usesContent()) == (false))
+    expect!((SizeMode.Fill.usesContent()) == (false))
+    expect!((SizeMode.Fraction(0.5).usesContent()) == (false))
+}
+
+@Test
+function isFillIsTrueOnlyForFill() {
+    expect!((SizeMode.Fill.isFill()) == (true))
+    expect!((SizeMode.Hug.isFill()) == (false))
+    expect!((SizeMode.Fixed(1.0).isFill()) == (false))
+    expect!((SizeMode.Fraction(0.5).isFill()) == (false))
+    expect!((SizeMode.Min(1.0).isFill()) == (false))
+}
+
+// A filling child contributes nothing to a parent that sizes from its content;
+// any other child contributes its outer extent, and so does a filling child of a
+// parent that does not size from its content.
+@Test
+function contentExtentIgnoresFillChildrenOfContentParents() {
+    expect!((contentExtent(childOuter: 50.0, child: .Fill, parentUsesContent: true)) == (0.0))
+    expect!((contentExtent(childOuter: 50.0, child: .Fill, parentUsesContent: false)) == (50.0))
+    expect!(
+        (contentExtent(childOuter: 50.0, child: .Fixed(30.0), parentUsesContent: true)) == (50.0)
+    )
+    expect!(
+        (contentExtent(childOuter: 50.0, child: .Fraction(0.5), parentUsesContent: true)) == (50.0)
+    )
+}
+
+@Test
+function crossOffsetPlacesAChildByItsAlignment() {
+    expect!((crossOffset(childSize: 40.0, available: 100.0, alignment: .Center)) == (30.0))
+    expect!((crossOffset(childSize: 40.0, available: 100.0, alignment: .End)) == (60.0))
+    expect!((crossOffset(childSize: 40.0, available: 100.0, alignment: .Start)) == (0.0))
+    expect!((crossOffset(childSize: 40.0, available: 100.0, alignment: .Stretch)) == (0.0))
+    expect!((crossOffset(childSize: 40.0, available: 100.0, alignment: .Baseline)) == (0.0))
+}
+
+// A filling child takes its flex share of the fill size; any other child keeps the
+// size it already has.
+@Test
+function resolvedStackMainSizeSharesTheFillByFlex() {
+    expect!(
+        (SizeMode.Fill.resolvedStackMainSize(current: 5.0, fillSize: 100.0, flex: 2.0)) == (200.0)
+    )
+    expect!((SizeMode.Fill.resolvedStackMainSize(current: 5.0, fillSize: 0.0, flex: 1.0)) == (0.0))
+    expect!(
+        (SizeMode.Fixed(40.0).resolvedStackMainSize(current: 40.0, fillSize: 100.0, flex: 2.0)) == (
+            40.0
+        )
+    )
+}
+
+// Stretch and filling children take the whole cross extent less margins. Any other
+// child keeps its size, but is bounded by the container when it is taller.
+@Test
+function resolvedStackCrossSizeStretchesAndBoundsByTheContainer() {
+    expect!(
+        (
+            CrossAlignment.Stretch.resolvedStackCrossSize(
+                cross: .Fixed(10.0),
+                current: 10.0,
+                available: 50.0,
+                marginTotal: 4.0
+            )
+        ) == (46.0)
+    )
+    expect!(
+        (
+            CrossAlignment.Start.resolvedStackCrossSize(
+                cross: .Fill,
+                current: 5.0,
+                available: 50.0,
+                marginTotal: 10.0
+            )
+        ) == (40.0)
+    )
+    expect!(
+        (
+            CrossAlignment.Start.resolvedStackCrossSize(
+                cross: .Fixed(30.0),
+                current: 30.0,
+                available: 50.0,
+                marginTotal: 0.0
+            )
+        ) == (30.0)
+    )
+    expect!(
+        (
+            CrossAlignment.Center.resolvedStackCrossSize(
+                cross: .Fixed(30.0),
+                current: 30.0,
+                available: 20.0,
+                marginTotal: 0.0
+            )
+        ) == (20.0)
+    )
+}
+
+// Places a 40 x 20 child at (10, 5) in a 100 x 80 container under one alignment.
+function placedAt(alignment: Alignment) -> Point {
+    let child = Size(width: 40.0, height: 20.0)
+    let container = Size(width: 100.0, height: 80.0)
+    let origin = Point(x: 10.0, y: 5.0)
+    return alignedOrigin(child: child, container: container, origin: origin, alignment: alignment)
+}
+
+// The container leaves 60 across and 60 down; centred is half of each.
+@Test
+function alignedOriginPlacesTheChildInEveryAlignment() {
+    let topLeading = placedAt(alignment: .TopLeading)
+    expect!((topLeading.x) == (10.0))
+    expect!((topLeading.y) == (5.0))
+    let top = placedAt(alignment: .Top)
+    expect!((top.x) == (40.0))
+    expect!((top.y) == (5.0))
+    let topTrailing = placedAt(alignment: .TopTrailing)
+    expect!((topTrailing.x) == (70.0))
+    expect!((topTrailing.y) == (5.0))
+    let leading = placedAt(alignment: .Leading)
+    expect!((leading.x) == (10.0))
+    expect!((leading.y) == (35.0))
+    let center = placedAt(alignment: .Center)
+    expect!((center.x) == (40.0))
+    expect!((center.y) == (35.0))
+    let trailing = placedAt(alignment: .Trailing)
+    expect!((trailing.x) == (70.0))
+    expect!((trailing.y) == (35.0))
+    let bottomLeading = placedAt(alignment: .BottomLeading)
+    expect!((bottomLeading.x) == (10.0))
+    expect!((bottomLeading.y) == (65.0))
+    let bottom = placedAt(alignment: .Bottom)
+    expect!((bottom.x) == (40.0))
+    expect!((bottom.y) == (65.0))
+    let bottomTrailing = placedAt(alignment: .BottomTrailing)
+    expect!((bottomTrailing.x) == (70.0))
+    expect!((bottomTrailing.y) == (65.0))
+}

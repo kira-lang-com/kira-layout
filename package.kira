@@ -1,0 +1,7 @@
+//! Layout engine for Kira UI: a two-pass measure-and-place algorithm over a flat tree of nodes.
+//!
+//! The package is a library. [`LayoutTree`] holds the nodes, and the passes in the engine fill in their frames.
+construct KiraLayout extends Package {
+    let version: String = "0.1.0"
+    let kind: PackageKind = .Library
+}

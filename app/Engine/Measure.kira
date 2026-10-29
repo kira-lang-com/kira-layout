@@ -1,0 +1,398 @@
+//! The measure pass: sizes every node from its size modes and from the content its arrangement has.
+//!
+//! The pass measures children first and then writes each node's result in place. A node whose cached
+//! measurement still holds is skipped.
+import Foundation
+extend LayoutNode {
+    /// Whether this node's cached measurement still holds for an offer of `offerW` by `offerH`.
+    ///
+    /// A node can skip when nothing in its subtree is dirty, its cache is valid, the placement pass did not
+    /// resize it, and its size is either offer-independent or was measured for this same offer. Taking the node
+    /// by `borrow` lets the caller pass `tree.nodes[index]` without copying it.
+    function canSkipMeasure(offerW: Number, offerH: Number) -> Bool {
+        return !self.subtreeDirty && self.measureCacheValid && !self.placeResized && (
+            self.offerIndependent || (self.measureOfferW == offerW && self.measureOfferH == offerH)
+        )
+    }
+}
+
+extend LayoutTree {
+    /// Measures the node at `index` and its subtree for an offer of `available`, and stores the result in the node.
+    ///
+    /// The pass is skipped when `canSkipMeasure` says the cached measurement holds. Otherwise the children are
+    /// measured first, a horizontal stack is fitted to the space its row has, and the node's own size is
+    /// resolved from its content.
+    function measure(borrow mut self, index: Number, available: borrow Size) {
+        var result = self
+        if result.nodes[index].canSkipMeasure(offerW: available.width, offerH: available.height) {
+            result.measureSkips++
+            return
+        }
+        result.measureComputes++
+        // Read node fields directly through the array. Each `result.nodes[index].f`
+        // borrow-elides to an aliased element read of a single scalar instead of
+        // cloning the whole node into a local. `childCount`/`firstChild` are hoisted
+        // into scalar locals because they drive the loop; the recursion never mutates
+        // `index`, so these stay valid across it.
+        let childCount = result.nodes[index].childCount
+        let firstChild = result.nodes[index].firstChild
+        let innerAvailable = Size(
+            width: nonNegative(
+                value: available.width - (result.nodes[index].padL + result.nodes[index].padR)
+            ),
+            height: nonNegative(
+                value: available.height - (result.nodes[index].padT + result.nodes[index].padB)
+            )
+        )
+
+        for i in 0..childCount {
+            let childIndex = firstChild + i
+            let childOffer = childAvailableSize(
+                parentAvailable: innerAvailable,
+                parent: result.nodes[index],
+                child: result.nodes[childIndex],
+                childCount: childCount
+            )
+            result.measure(index: childIndex, available: childOffer)
+        }
+
+        result.fitStackChildren(index: index, available: innerAvailable)
+
+        let contentSize = result.contentSize(index: index, available: innerAvailable)
+        let resolvedWidth = result.nodes[index].width.resolveOuter(
+            available: available.width,
+            content: contentSize.width,
+            padding: result.nodes[index].padL + result.nodes[index].padR
+        )
+        let resolvedHeight = result.nodes[index].height.resolveOuter(
+            available: available.height,
+            content: contentSize.height,
+            padding: result.nodes[index].padT + result.nodes[index].padB
+        )
+        // In-place scalar write-back. The child recursion above never touches
+        // `index`, so the element still holds everything except the geometry we
+        // overwrite here. Each store borrow-elides to an aliased in-place field write
+        // (no node clone, no array_set).
+        result.nodes[index].measuredW = resolvedWidth
+        result.nodes[index].measuredH = resolvedHeight
+        result.nodes[index].measureCacheValid = true
+        result.nodes[index].measureOfferW = available.width
+        result.nodes[index].measureOfferH = available.height
+    }
+
+    /// The content extent of the node at `index`, before its own size mode is applied.
+    ///
+    /// The arrangement picks the rule. `Fill` arranges its content as an overlay.
+    function contentSize(index: Number, available: borrow Size) -> Size {
+        match self.nodes[index].arrange {
+            Stack -> return self.stackContentSize(index: index)
+            Absolute -> return self.absoluteContentSize(index: index)
+            Grid -> return self.gridContentSize(index: index)
+            Wrap -> return self.wrapContentSize(index: index, available: available)
+            Overlay -> return self.overlayContentSize(index: index)
+            Fill -> return self.overlayContentSize(index: index)
+        }
+    }
+}
+
+extend SizeMode {
+    /// Whether a child gives up space before a fixed sibling does.
+    ///
+    /// `Fill` and `Fraction` children are measured at the whole offer, so a row holding one always sums past its
+    /// own width. Those children give the space back first when a row is too wide.
+    function isFlexible() -> Bool {
+        match self {
+            Fill -> return true
+            Fraction(of) -> return true
+            Fixed(value) -> return false
+            Hug -> return false
+            Min(value) -> return false
+            Max(value) -> return false
+            Reveal(fraction) -> return false
+        }
+    }
+}
+
+extend LayoutTree {
+    /// Shrinks the children of the horizontal stack at `index` so they fit the width the row has.
+    ///
+    /// Every child was offered the whole remaining extent, and nothing reconciles the sum afterwards. The
+    /// deficit comes out of the flexible children first and only then out of the rest. A column is not fitted;
+    /// it lets its children overflow and be scrolled.
+    function fitStackChildren(borrow mut self, index: Number, available: borrow Size) {
+        var result = self
+        if result.nodes[index].arrange != .Stack {
+            return
+        }
+        let childCount = result.nodes[index].childCount
+        if childCount == 0 {
+            return
+        }
+        let firstChild = result.nodes[index].firstChild
+        // A row fits its children; a column lets them overflow, because the answer
+        // to a column taller than its space is to scroll it. Compressing there
+        // pushes a block below the size of its own content, and content that does
+        // not fit its box is drawn over whatever is beside it.
+        if result.nodes[index].axis != .Horizontal {
+            return
+        }
+        let limit = available.width
+        if limit <= 0.0 {
+            return
+        }
+        let spacingTotal = childCount > 1 ? repeatedSpacing(
+            count : childCount,
+            spacing: result.nodes[index].spacing
+        ): 0.0
+        var children = 0.0
+        var flexible = 0.0
+        for i in 0..childCount {
+            let childIndex = firstChild + i
+            let outer = result.nodes[childIndex].outerWidth()
+            children = children + outer
+            if result.nodes[childIndex].width.isFlexible() {
+                flexible = flexible + outer
+            }
+        }
+        let room = nonNegative(value: limit - spacingTotal)
+        if children <= room || children <= 0.0 {
+            return
+        }
+        let deficit = children - room
+        // What the flexible children can give, and what the rest must cover after
+        // they have given it.
+        let fromFlexible = deficit < flexible ? deficit : flexible
+        let flexibleScale = flexible > 0.0 ? (flexible - fromFlexible) / flexible : 1.0
+        let fixed = nonNegative(value: children - flexible)
+        let fromFixed = nonNegative(value: deficit - fromFlexible)
+        let fixedScale = fixed > 0.0 ? nonNegative(value : fixed - fromFixed) / fixed: 1.0
+        for i in 0..childCount {
+            let childIndex = firstChild + i
+            let margins = result.nodes[childIndex].marL + result.nodes[childIndex].marR
+            let scale = result.nodes[childIndex].width.isFlexible() ? flexibleScale : fixedScale
+            if scale < 1.0 {
+                let target = nonNegative(
+                    value: result.nodes[childIndex].outerWidth() * scale - margins
+                )
+                let offer = Size(
+                    width: target,
+                    height: nonNegative(
+                        value: available.height - (
+                            result.nodes[childIndex].marT + result.nodes[childIndex].marB
+                        )
+                    )
+                )
+                result.measure(index: childIndex, available: offer)
+                // A child whose own size is exact ignores the smaller offer, so the
+                // fit is applied to the result as well as asked of it.
+                if result.nodes[childIndex].measuredW > target {
+                    result.nodes[childIndex].measuredW = target
+                }
+            }
+        }
+    }
+
+    /// The content extent of a stack: its children summed along its axis, the largest taken across it, plus
+    /// the spacing between them.
+    ///
+    /// A horizontal baseline row also reserves the deepest drop below the shared baseline.
+    function stackContentSize(index: Number) -> Size {
+        let childCount = self.nodes[index].childCount
+        let firstChild = self.nodes[index].firstChild
+        let horizontal = self.nodes[index].axis == .Horizontal
+        let spacing = self.nodes[index].spacing
+        let usesContentW = self.nodes[index].width.usesContent()
+        let usesContentH = self.nodes[index].height.usesContent()
+        // A baseline row is as tall as the deepest baseline plus the longest drop
+        // below one: children hang from a shared line, so the tallest child is not
+        // the row's height when its baseline is higher than the row's.
+        let baselineRow = self.nodes[index].alignment == .Baseline && horizontal
+        var aboveBaseline = 0.0
+        var belowBaseline = 0.0
+        var width = 0.0
+        var height = 0.0
+        for i in 0..childCount {
+            let childIndex = firstChild + i
+            let childWidth = contentExtent(
+                childOuter: self.nodes[childIndex].outerWidth(),
+                child: self.nodes[childIndex].width,
+                parentUsesContent: usesContentW
+            )
+            let childHeight = contentExtent(
+                childOuter: self.nodes[childIndex].outerHeight(),
+                child: self.nodes[childIndex].height,
+                parentUsesContent: usesContentH
+            )
+            if horizontal {
+                width = width + childWidth
+                height = height > childHeight ? height : childHeight
+                if baselineRow {
+                    let childBaseline = self.nodeBaseline(index: childIndex)
+                    if childBaseline > 0.0 {
+                        let drop = nonNegative(value: childHeight - childBaseline)
+                        aboveBaseline = aboveBaseline > childBaseline ? aboveBaseline : childBaseline
+                        belowBaseline = belowBaseline > drop ? belowBaseline : drop
+                    }
+                }
+            } else {
+                width = width > childWidth ? width : childWidth
+                height = height + childHeight
+            }
+        }
+        // Only when something in the row actually reported a line: a row of nothing
+        // but fills has no baseline, and its height is the tallest child as always.
+        if baselineRow && aboveBaseline > 0.0 {
+            let stacked = aboveBaseline + belowBaseline
+            height = height > stacked ? height : stacked
+        }
+        if childCount > 1 {
+            if horizontal {
+                width = width + repeatedSpacing(count: childCount, spacing: spacing)
+            } else {
+                height = height + repeatedSpacing(count: childCount, spacing: spacing)
+            }
+        }
+        return Size(width: width, height: height)
+    }
+
+    /// The content extent of an absolute arrangement: the furthest right and bottom edges among its children.
+    function absoluteContentSize(index: Number) -> Size {
+        let childCount = self.nodes[index].childCount
+        let firstChild = self.nodes[index].firstChild
+        let usesContentW = self.nodes[index].width.usesContent()
+        let usesContentH = self.nodes[index].height.usesContent()
+        var width = 0.0
+        var height = 0.0
+        for i in 0..childCount {
+            let childIndex = firstChild + i
+            let childWidth = contentExtent(
+                childOuter: self.nodes[childIndex].outerRight(),
+                child: self.nodes[childIndex].width,
+                parentUsesContent: usesContentW
+            )
+            let childHeight = contentExtent(
+                childOuter: self.nodes[childIndex].outerBottom(),
+                child: self.nodes[childIndex].height,
+                parentUsesContent: usesContentH
+            )
+            width = width > childWidth ? width : childWidth
+            height = height > childHeight ? height : childHeight
+        }
+        return Size(width: width, height: height)
+    }
+
+    /// The content extent of an overlay: the largest child on each axis.
+    function overlayContentSize(index: Number) -> Size {
+        let childCount = self.nodes[index].childCount
+        let firstChild = self.nodes[index].firstChild
+        let usesContentW = self.nodes[index].width.usesContent()
+        let usesContentH = self.nodes[index].height.usesContent()
+        var width = 0.0
+        var height = 0.0
+        for i in 0..childCount {
+            let childIndex = firstChild + i
+            let childWidth = contentExtent(
+                childOuter: self.nodes[childIndex].outerWidth(),
+                child: self.nodes[childIndex].width,
+                parentUsesContent: usesContentW
+            )
+            let childHeight = contentExtent(
+                childOuter: self.nodes[childIndex].outerHeight(),
+                child: self.nodes[childIndex].height,
+                parentUsesContent: usesContentH
+            )
+            width = width > childWidth ? width : childWidth
+            height = height > childHeight ? height : childHeight
+        }
+        return Size(width: width, height: height)
+    }
+
+    /// The content extent of a grid: the widest cell times the used columns plus the column gaps, and the
+    /// summed row heights plus the row gaps.
+    function gridContentSize(index: Number) -> Size {
+        let columns = self.nodes[index].columns
+        if columns <= 0 {
+            return Size(width: 0.0, height: 0.0)
+        }
+        let childCount = self.nodes[index].childCount
+        let firstChild = self.nodes[index].firstChild
+        let spacing = self.nodes[index].spacing
+        let rowSpacing = self.nodes[index].rowSpacing
+        let usesContentW = self.nodes[index].width.usesContent()
+        let usesContentH = self.nodes[index].height.usesContent()
+        var maxCellWidth = 0.0
+        var totalHeight = 0.0
+        var rowHeight = 0.0
+        for i in 0..childCount {
+            let childIndex = firstChild + i
+            let childWidth = contentExtent(
+                childOuter: self.nodes[childIndex].outerWidth(),
+                child: self.nodes[childIndex].width,
+                parentUsesContent: usesContentW
+            )
+            let childHeight = contentExtent(
+                childOuter: self.nodes[childIndex].outerHeight(),
+                child: self.nodes[childIndex].height,
+                parentUsesContent: usesContentH
+            )
+            let column = i % columns
+            maxCellWidth = maxCellWidth > childWidth ? maxCellWidth : childWidth
+            rowHeight = rowHeight > childHeight ? rowHeight : childHeight
+            if column == columns - 1 || i == childCount - 1 {
+                totalHeight = totalHeight + rowHeight
+                rowHeight = 0.0
+            }
+        }
+        let usedColumns = childCount < columns ? childCount : columns
+        var totalWidth = 0.0
+        if usedColumns > 0 {
+            totalWidth = maxCellWidth * Number(usedColumns)
+            totalWidth = totalWidth + repeatedSpacing(count: usedColumns, spacing: spacing)
+        }
+        let rowCount = childCount == 0 ? 0 : trunc((childCount - 1) / columns) + 1
+        totalHeight = totalHeight + repeatedSpacing(count: rowCount, spacing: rowSpacing)
+        return Size(width: totalWidth, height: totalHeight)
+    }
+
+    /// The content extent of a wrapping arrangement.
+    ///
+    /// Children fill a line up to the `available` width, and each line is as tall as its tallest child.
+    function wrapContentSize(index: Number, available: borrow Size) -> Size {
+        let childCount = self.nodes[index].childCount
+        let firstChild = self.nodes[index].firstChild
+        let spacing = self.nodes[index].spacing
+        let rowSpacing = self.nodes[index].rowSpacing
+        let usesContentW = self.nodes[index].width.usesContent()
+        let usesContentH = self.nodes[index].height.usesContent()
+        var width = 0.0
+        var height = 0.0
+        var lineWidth = 0.0
+        var lineHeight = 0.0
+        for i in 0..childCount {
+            let childIndex = firstChild + i
+            let childWidth = contentExtent(
+                childOuter: self.nodes[childIndex].outerWidth(),
+                child: self.nodes[childIndex].width,
+                parentUsesContent: usesContentW
+            )
+            let childHeight = contentExtent(
+                childOuter: self.nodes[childIndex].outerHeight(),
+                child: self.nodes[childIndex].height,
+                parentUsesContent: usesContentH
+            )
+            let proposedWidth = lineWidth == 0.0 ? childWidth : lineWidth + spacing + childWidth
+            if lineWidth > 0.0 && proposedWidth > available.width {
+                width = width > lineWidth ? width : lineWidth
+                height = height + lineHeight + rowSpacing
+                lineWidth = childWidth
+                lineHeight = childHeight
+            } else {
+                lineWidth = proposedWidth
+                lineHeight = lineHeight > childHeight ? lineHeight : childHeight
+            }
+        }
+        width = width > lineWidth ? width : lineWidth
+        height = height + lineHeight
+        return Size(width: width, height: height)
+    }
+}

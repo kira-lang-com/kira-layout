@@ -1,0 +1,469 @@
+//! The layout model: the authored descriptor of each node, and the flat tree the engine runs over.
+
+import Foundation
+/// The authored description of one layout node: how it sizes, arranges its children, spaces them, and where it sits.
+///
+/// A tree keeps one descriptor per node in `LayoutTree.descriptors`. `LayoutNode.flatten` copies
+/// the descriptor's fields into the node's inline scalars, which is what the engine reads.
+public struct LayoutDescriptor {
+    /// How the node's width is chosen.
+    var width: SizeMode
+    /// How the node's height is chosen.
+    var height: SizeMode
+    /// The share of a stack's leftover main-axis space taken by a `Fill` child, as a multiplier.
+    var flex: Number = 0
+    /// How the node arranges its children inside its box.
+    var arrange: ArrangeMode
+    /// The direction a `Stack` runs along.
+    var axis: Axis
+    /// The gap between neighbouring children in a `Stack`, a `Grid` row and a `Wrap` row.
+    var spacing: Number = 0.0
+    /// The gap between rows in a `Grid` or a `Wrap`.
+    var rowSpacing: Number = 0.0
+    /// How children are placed across a stack's cross axis, and within a wrapped row.
+    var alignment: CrossAlignment
+    /// Where an `Overlay` child sits inside the overlay's box.
+    var overlayAlignment: Alignment
+    /// The number of columns in a `Grid`. A value of zero means the node has no grid columns.
+    var columns: Number = 1
+    // Where this node's baseline sits, measured down from its own top edge. A
+    // run of text reports the line it is written on; everything else leaves it
+    // at zero and is aligned by its bottom edge, which is where a glyph or a
+    // control beside a word belongs.
+    /// Where the node's baseline sits, measured down from its top edge. Zero means it has none.
+    var baseline: Number = 0.0
+    /// Space inside the node's edges, around its children.
+    var padding: EdgeInsets
+    /// Space outside the node's edges, between it and its siblings.
+    var margin: EdgeInsets
+    /// The horizontal offset of an `Absolute` child within its parent.
+    var x: Number = 0.0
+    /// The vertical offset of an `Absolute` child within its parent.
+    var y: Number = 0.0
+    /// A stacking order for the node. The layout engine does not read it; it is compared by
+    /// `LayoutDescriptor.equals` and kept for whoever consumes the tree.
+    var zIndex: Number = 0
+    /// Whether the node clips its content to its box. The layout engine does not read it; it is
+    /// compared by `LayoutDescriptor.equals` and kept for whoever consumes the tree.
+    var clipContent: Bool = false
+}
+
+/// One node of a flat layout tree: the geometry the engine computed, the inputs it was computed from, and the cache state that lets unchanged subtrees be skipped.
+///
+/// Children are not stored as a list. A node's children are the `childCount` entries that start at
+/// `firstChild`, so the tree stays one flat array. The inline scalars exist so a node can be bound
+/// without copying nested structs; see the comment on `flatten`.
+public struct LayoutNode {
+    // Resolved geometry, stored as inline scalars (not `Size`/`Point` structs):
+    // a node is bound (`let node = tree.nodes[i]`) thousands of times per resize
+    // frame, and a nested struct field would deep-copy a heap `Size` + `Point` on
+    // every such bind. Scalars ride along in the node's own value slice for free.
+    /// The width the measure pass gave the node's box, padding included and margins excluded.
+    var measuredW: Number = 0.0
+    /// The height the measure pass gave the node's box, padding included and margins excluded.
+    var measuredH: Number = 0.0
+    /// The horizontal origin of the node's box, in tree coordinates, set by the place pass.
+    var originX: Number = 0.0
+    /// The vertical origin of the node's box, in tree coordinates, set by the place pass.
+    var originY: Number = 0.0
+    /// The index in `LayoutTree.nodes` of this node's first child. Meaningless when `childCount` is zero.
+    var firstChild: Number = 0
+    /// The number of direct children, stored contiguously from `firstChild`.
+    var childCount: Number = 0
+    /// How the node's width is chosen, copied from its descriptor.
+    var width: SizeMode = SizeMode.Fixed(0.0)
+    /// How the node's height is chosen, copied from its descriptor.
+    var height: SizeMode = SizeMode.Fixed(0.0)
+    /// The stack flex multiplier, copied from its descriptor.
+    var flex: Number = 0
+    /// How the node arranges its children, copied from its descriptor.
+    var arrange: ArrangeMode = ArrangeMode.Fill
+    /// The direction a `Stack` runs along, copied from its descriptor.
+    var axis: Axis = Axis.Vertical
+    /// The gap between neighbouring children, copied from its descriptor.
+    var spacing: Number = 0.0
+    /// The gap between rows, copied from its descriptor.
+    var rowSpacing: Number = 0.0
+    /// The cross-axis alignment of children, copied from its descriptor.
+    var alignment: CrossAlignment = CrossAlignment.Start
+    /// The overlay alignment of children, copied from its descriptor.
+    var overlayAlignment: Alignment = Alignment.TopLeading
+    /// The grid column count, copied from its descriptor. Zero means no grid columns.
+    var columns: Number = 0
+    // The baseline this node reports, from its top edge. Zero means it has none
+    // and aligns by its bottom edge.
+    /// The baseline this node reports, from its top edge. Zero means it has none.
+    var baseline: Number = 0.0
+    /// The leading padding, copied from the descriptor.
+    var padL: Number = 0.0
+    /// The top padding, copied from the descriptor.
+    var padT: Number = 0.0
+    /// The trailing padding, copied from the descriptor.
+    var padR: Number = 0.0
+    /// The bottom padding, copied from the descriptor.
+    var padB: Number = 0.0
+    /// The leading margin, copied from the descriptor.
+    var marL: Number = 0.0
+    /// The top margin, copied from the descriptor.
+    var marT: Number = 0.0
+    /// The trailing margin, copied from the descriptor.
+    var marR: Number = 0.0
+    /// The bottom margin, copied from the descriptor.
+    var marB: Number = 0.0
+    /// The horizontal offset of an `Absolute` child, copied from the descriptor.
+    var dx: Number = 0.0
+    /// The vertical offset of an `Absolute` child, copied from the descriptor.
+    var dy: Number = 0.0
+
+    // --- Retained layout cache ---------------------------------------------
+    // `subtreeDirty` is owned by the layout pass: it is true when this node or
+    // any descendant changed since the cached layout was produced. The engine
+    // only reads it. When a node is clean and is offered the same constraints
+    // it was last measured/placed against, the engine reuses the cached
+    // `measuredSize` / `placedOrigin` for the whole subtree instead of
+    // recursing. A freshly built node defaults to dirty so a first pass always
+    // computes real geometry.
+    /// True when this node or a descendant changed since the cached layout was made. Set by `LayoutTree.propagateDirty` and cleared by `markAllClean`; a fresh node is dirty.
+    var subtreeDirty: Bool = true
+    // Top-down measure pass: the available size this node was last measured
+    // against. The top-down measure of a node is skipped only when the node is
+    // clean, the offer is unchanged, and the node was not resized to a different
+    // size during the previous placement (`placeResized` false -- a rigid node).
+    // For such nodes a skip is exact: recomputing would produce the same size,
+    // and the already-correct subtree geometry is preserved. Flexible nodes
+    // (resized at place time) keep `placeResized` set and recompute as before.
+    /// True when `measureOfferW` and `measureOfferH` hold a valid measurement of this node.
+    var measureCacheValid: Bool = false
+    /// The width offered to the node at its last measurement.
+    var measureOfferW: Number = 0.0
+    /// The height offered to the node at its last measurement.
+    var measureOfferH: Number = 0.0
+    /// True when the node was resized to a different size during its last placement, so a measurement can not simply be reused.
+    var placeResized: Bool = false
+    // Placement pass: the origin and measured size this subtree was last placed
+    // with. If both are unchanged and the subtree is clean, every descendant
+    // origin is still valid and placement is skipped -- exact regardless of
+    // whether the node is rigid or flexible, because it is checked against the
+    // final resolved size at place time.
+    /// True when the `placeOriginX`/`placeOriginY` and `placeMeasuredW`/`placeMeasuredH` fields hold a valid placement of this subtree.
+    var placeCacheValid: Bool = false
+    /// The horizontal origin the subtree was last placed at.
+    var placeOriginX: Number = 0.0
+    /// The vertical origin the subtree was last placed at.
+    var placeOriginY: Number = 0.0
+    /// The width the node had when the subtree was last placed.
+    var placeMeasuredW: Number = 0.0
+    /// The height the node had when the subtree was last placed.
+    var placeMeasuredH: Number = 0.0
+    // True when this node's measured size does not depend on the offered size:
+    // both axes are Fixed, so the node (and its whole subtree's intrinsic sizing)
+    // is invariant under a resize. Such a node skips re-measure even when the
+    // offer changed — its cached measuredSize is exactly what a recompute would
+    // produce. Set once from the descriptor when the tree is built.
+    /// True when both axes are `Fixed`, so the measured size does not depend on the offer and a resize can reuse it.
+    var offerIndependent: Bool = false
+}
+
+/// A flat layout tree: its nodes in parent-before-child order, the descriptors they were built from, and counters for the last pass.
+///
+/// Each node's parent appears before it in `nodes`, and a node's children are stored contiguously
+/// (see `LayoutNode.firstChild`). The root and every detached node have no parent.
+public struct LayoutTree {
+    /// The flat node array. The parent of any node appears before that node.
+    var nodes: [LayoutNode]
+    // Per-node `LayoutDescriptor`, parallel to `nodes` (same index space). The
+    // descriptor is the heap-bearing source-of-truth (SizeMode payloads,
+    // EdgeInsets) that `collect` flattens into the node's inline scalar fields.
+    // It is kept OFF `LayoutNode` deliberately: the measure/place hot path binds
+    // `nodes[i]` thousands of times per resize frame, and embedding the
+    // descriptor would deep-copy it on every such bind. The engine never reads
+    // this array; only `collect` (flatten once) and `runIncremental`
+    // (descriptor compare/patch) touch it. Engine-only trees may leave it empty.
+    /// The descriptor of each node, at the same index as `nodes`. Empty for an engine-only tree.
+    var descriptors: [LayoutDescriptor] = []
+    // Instrumentation: how many subtree roots the most recent measure/place
+    // pass actually recomputed versus reused from cache. Reset at the start of
+    // each pass. Lets callers and tests prove recomputation reduction.
+    /// The number of nodes the most recent measure pass recomputed. Reset by `resetCounters`.
+    var measureComputes: Number = 0
+    /// The number of nodes the most recent measure pass reused from cache. Reset by `resetCounters`.
+    var measureSkips: Number = 0
+    /// The number of nodes the most recent place pass recomputed. Reset by `resetCounters`.
+    var placeComputes: Number = 0
+    /// The number of nodes the most recent place pass reused from cache. Reset by `resetCounters`.
+    var placeSkips: Number = 0
+}
+
+extend LayoutTree {
+    /// Reset the per-pass instrumentation counters. Call once before a
+    /// measure+place pass so `measureSkips` / `placeSkips` reflect that pass alone.
+    function resetCounters() -> LayoutTree {
+        var t = self
+        t.measureComputes = 0
+        t.measureSkips = 0
+        t.placeComputes = 0
+        t.placeSkips = 0
+        return t
+    }
+
+    /// Compute parent indices for a flat layout tree. Root and detached nodes map
+    /// to `.None`. The flat layout always appends descendants after their parent, so a
+    /// single forward scan suffices.
+    function parentIndices() -> [Number?] {
+        var parents: [Number?] = []
+        for _ in 0..self.nodes.count {
+            parents.append(.None)
+        }
+        for i in 0..self.nodes.count {
+            for c in 0..self.nodes[i].childCount {
+                parents[self.nodes[i].firstChild + c] = .Some(i)
+            }
+        }
+        return parents
+    }
+
+    /// Set `subtreeDirty` precisely from a per-node "this node's own descriptor
+    /// changed" flag: every changed node and all of its ancestors become dirty,
+    /// everything else is marked clean. This is the precise invalidation that lets
+    /// the engine skip untouched subtrees -- a change dirties only the path from the
+    /// changed node to the root, leaving sibling subtrees reusable.
+    function propagateDirty(borrow mut self, selfChanged: borrow [Bool]) {
+        let parents = self.parentIndices()
+        for i in 0..self.nodes.count {
+            self.nodes[i].subtreeDirty = false
+        }
+        for i in 0..self.nodes.count {
+            if i < selfChanged.count && selfChanged[i] {
+                var current: Number? = .Some(i)
+                while true {
+                    match current {
+                        Some(cur) -> {
+                            if self.nodes[cur].subtreeDirty { break }
+                            self.nodes[cur].subtreeDirty = true
+                            current = parents[cur]
+                        }
+                        None -> break
+                    }
+                }
+            }
+        }
+    }
+
+    /// Mark the entire tree dirty (forces a full recompute on the next pass).
+    function markAllDirty(borrow mut self) {
+        for i in 0..self.nodes.count {
+            self.nodes[i].subtreeDirty = true
+        }
+    }
+
+    /// Mark the entire tree clean. After a full layout every node's cached
+    /// measure/place state is valid, so clearing `subtreeDirty` lets the next pass
+    /// reuse it: a re-layout against a new offer (a resize) then recomputes only the
+    /// nodes whose incoming constraints actually changed, and reuses the cached
+    /// geometry for every subtree whose offer and origin are unchanged. Sound only
+    /// when the descriptors did not change (the retained re-layout path, where the
+    /// view tree and every descriptor are identical and only the viewport differs).
+    function markAllClean(borrow mut self) {
+        for i in 0..self.nodes.count {
+            self.nodes[i].subtreeDirty = false
+        }
+    }
+
+    /// True when two flat trees have identical structure (node count and each
+    /// node's child span). When structure matches, the cached tree can be reused
+    /// with patched descriptors; otherwise a full rebuild is required.
+    function structureMatches(b: borrow LayoutTree) -> Bool {
+        if self.nodes.count != b.nodes.count {
+            return false
+        }
+        for i in 0..self.nodes.count {
+            if self.nodes[i].firstChild != b.nodes[i].firstChild || self.nodes[i].childCount != b.nodes[i].childCount {
+                return false
+            }
+        }
+        return true
+    }
+}
+
+extend SizeMode {
+    /// Whether `b` is the same size mode carrying the same number.
+    ///
+    /// Compares the kind and the value rather than matching each mode against each other, so a new mode needs
+    /// no pairwise arms, and a mode always equals itself.
+    function equals(b: SizeMode) -> Bool {
+        if self.kind() != b.kind() {
+            return false
+        }
+        return self.value() == b.value()
+    }
+
+    /// Whether this size mode is `Fixed`.
+    function isFixed() -> Bool {
+        match self {
+            Fixed(value) -> return true
+            Fill -> return false
+            Hug -> return false
+            Fraction(of) -> return false
+            Min(value) -> return false
+            Max(value) -> return false
+            Reveal(fraction) -> return false
+        }
+    }
+
+    /// A stable number naming the case of this size mode: `1` for `Fixed` through `7` for `Reveal`.
+    ///
+    /// Two size modes are equal when their kinds and values are equal.
+    function kind() -> Number {
+        match self {
+            Fixed(value) -> return 1
+            Fill -> return 2
+            Hug -> return 3
+            Fraction(of) -> return 4
+            Min(value) -> return 5
+            Max(value) -> return 6
+            Reveal(fraction) -> return 7
+        }
+    }
+
+    /// The number a size mode carries.
+    ///
+    /// That is the value of `Fixed`, `Min` and `Max`, the fraction of `Fraction` and `Reveal`, and zero for `Fill` and `Hug`.
+    function value() -> Number {
+        match self {
+            Fixed(value) -> return value
+            Fill -> return 0.0
+            Hug -> return 0.0
+            Fraction(of) -> return of
+            Min(value) -> return value
+            Max(value) -> return value
+            Reveal(fraction) -> return fraction
+        }
+    }
+}
+
+extend LayoutDescriptor {
+    /// A node is offer-independent when both axes resolve to a Fixed size: its
+    /// measured size is the same regardless of the offered constraints, so a resize
+    /// can reuse its cached geometry without recomputing. Computed once when the tree
+    /// is built (relayout reuses it).
+    function isOfferIndependent() -> Bool {
+        return self.width.isFixed() && self.height.isFixed()
+    }
+}
+
+extend LayoutNode {
+    /// Whether both axes of this node resolve to a fixed size, so its measured size does not depend on the offer.
+    function isOfferIndependent() -> Bool {
+        return self.width.isFixed() && self.height.isFixed()
+    }
+
+    /// Flatten one descriptor into the node that carries it, in place.
+    ///
+    /// Takes the node by `borrow mut` rather than by value: a `LayoutNode` is
+    /// thirty-one fields, and taking it by value copied it into the callee, again
+    /// into its `var result`, and a third time on the way back into the array it
+    /// came from — three copies to overwrite twenty of its fields, once per node,
+    /// every frame.
+    function flatten(borrow mut self, desc: borrow LayoutDescriptor) {
+        self.width = desc.width
+        self.height = desc.height
+        self.flex = desc.flex
+        self.arrange = desc.arrange
+        self.axis = desc.axis
+        self.spacing = desc.spacing
+        self.rowSpacing = desc.rowSpacing
+        self.alignment = desc.alignment
+        self.overlayAlignment = desc.overlayAlignment
+        self.columns = desc.columns
+        self.baseline = desc.baseline
+        self.padL = desc.padding.leading
+        self.padT = desc.padding.top
+        self.padR = desc.padding.trailing
+        self.padB = desc.padding.bottom
+        self.marL = desc.margin.leading
+        self.marT = desc.margin.top
+        self.marR = desc.margin.trailing
+        self.marB = desc.margin.bottom
+        self.dx = desc.x
+        self.dy = desc.y
+        self.offerIndependent = self.width.isFixed() && self.height.isFixed()
+    }
+}
+
+extend LayoutTree {
+    /// Flatten every node's descriptor into its inline scalar fields, reading from
+    /// the tree's parallel `descriptors` array. Requires `descriptors` to be
+    /// populated and index-aligned with `nodes`.
+    function flattenDescriptors(borrow mut self) {
+        for index in 0..self.nodes.count {
+            self.nodes[index].flatten(self.descriptors[index])
+        }
+    }
+}
+
+extend EdgeInsets {
+    /// Whether every edge of this inset equals the matching edge of `b`.
+    function equals(b: borrow EdgeInsets) -> Bool {
+        return self.top == b.top && self.trailing == b.trailing && self.bottom == b.bottom && self.leading == b.leading
+    }
+}
+
+extend LayoutDescriptor {
+    /// True when two descriptors produce identical layout. Used by the retained
+    /// layout pass to decide whether a node's own contribution changed between
+    /// frames. Enum-coded fields (arrange/axis/alignment/overlayAlignment) compare
+    /// by value; float/int fields compare exactly because they are recomputed from
+    /// the same inputs each frame and are bit-stable when unchanged.
+    function equals(b: borrow LayoutDescriptor) -> Bool {
+        return self.width.equals(b.width) &&
+            self.height.equals(b.height) &&
+            self.flex == b.flex &&
+            self.arrange == b.arrange &&
+            self.axis == b.axis &&
+            self.spacing == b.spacing &&
+            self.rowSpacing == b.rowSpacing &&
+            self.alignment == b.alignment &&
+            self.overlayAlignment == b.overlayAlignment &&
+            self.columns == b.columns &&
+            self.padding.equals(b.padding) &&
+            self.margin.equals(b.margin) &&
+            self.x == b.x &&
+            self.y == b.y &&
+            self.zIndex == b.zIndex &&
+            self.clipContent == b.clipContent
+    }
+}
+
+extend LayoutTree {
+    /// The rectangle the node at `index` occupies: its origin and its measured size.
+    ///
+    /// Reads the four geometry fields through the array, so the node is not copied. Called once per rendered view.
+    function frame(index: Number) -> Rect {
+        // Read the four geometry scalars directly through the array (borrow-elided)
+        // instead of cloning the whole ~40-field node. Called once per rendered view.
+        return Rect(
+            x: self.nodes[index].originX,
+            y: self.nodes[index].originY,
+            width: self.nodes[index].measuredW,
+            height: self.nodes[index].measuredH
+        )
+    }
+}
+
+extend LayoutNode {
+    /// A copy of this node with its measured size set to `size`.
+    function withSize(size: borrow Size) -> LayoutNode {
+        var result = self
+        result.measuredW = size.width
+        result.measuredH = size.height
+        return result
+    }
+
+    /// A copy of this node with its origin set to `origin`.
+    function withOrigin(origin: borrow Point) -> LayoutNode {
+        var result = self
+        result.originX = origin.x
+        result.originY = origin.y
+        return result
+    }
+}

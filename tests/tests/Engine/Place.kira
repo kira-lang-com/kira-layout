@@ -1,0 +1,140 @@
+//! Tests for the placement pass: where each arrangement puts its children inside the space given.
+import Foundation
+import KiraLayout
+
+// The placement pass: where each child lands and how large a filling child is
+// made once the parent's final size is known. Subject: app/Engine/Place.kira.
+
+// Children start 8 after the one before them ends, which is the row's spacing.
+@Test
+function fixedTrioPlacesEachChildAfterTheLast() {
+    let tree = laidOut(tree: fixedTrioTree(), available: Size(width: 400.0, height: 200.0))
+    expect!((tree.frame(1).x) == (0.0))
+    expect!((tree.frame(2).x) == (116.0))
+    expect!((tree.frame(3).x) == (232.0))
+    expect!((tree.frame(2).x - frameRight(tree, 1)) == (8.0))
+    expect!((tree.frame(1).y) == (0.0))
+}
+
+// In a row too narrow for the three, each child gives up its share, and the last
+// one still ends at the row's edge rather than past it.
+@Test
+function fixedTrioEndsAtTheEdgeOfANarrowRow() {
+    let tree = laidOut(tree: fixedTrioTree(), available: Size(width: 300.0, height: 200.0))
+    expect!((nearlyEqual(tree.frame(1).width, 284.0 / 3.0)) == (true))
+    expect!((nearlyEqual(tree.frame(2).x, 284.0 / 3.0 + 8.0)) == (true))
+    expect!((nearlyEqual(frameRight(tree, 3), 300.0)) == (true))
+}
+
+// Of the two fixed children and the filling spacer, the spacer takes what is left
+// after the fixed children and the 0 spacing: 300 - 60 - 40 = 200.
+@Test
+function contentRowFillChildTakesTheLeftoverWidth() {
+    let tree = laidOut(tree: contentRowTree(), available: Size(width: 300.0, height: 800.0))
+    expect!((tree.frame(1).x) == (0.0))
+    expect!((tree.frame(2).x) == (60.0))
+    expect!((tree.frame(2).width) == (200.0))
+    expect!((tree.frame(3).x) == (260.0))
+    expect!((tree.frame(3).width) == (40.0))
+}
+
+// A filling child fills the cross axis of the row it is in, so it is the row's
+// height and sits at the top of it.
+@Test
+function contentRowFillChildTakesTheRowHeight() {
+    let tree = laidOut(tree: contentRowTree(), available: Size(width: 300.0, height: 800.0))
+    expect!((tree.frame(0).height) == (20.0))
+    expect!((tree.frame(2).height) == (20.0))
+    expect!((tree.frame(2).y) == (0.0))
+}
+
+// 800 offered, 20 + 24 spent: the spacer is the rest, and the trailing child
+// therefore sits on the bottom edge. Start alignment keeps every child at x 0.
+@Test
+function contentColumnFillChildTakesTheLeftoverHeight() {
+    let tree = laidOut(tree: contentColumnTree(), available: Size(width: 500.0, height: 800.0))
+    expect!((tree.frame(0).height) == (800.0))
+    expect!((tree.frame(1).y) == (0.0))
+    expect!((tree.frame(2).height) == (756.0))
+    expect!((tree.frame(3).y) == (776.0))
+    expect!((tree.frame(3).x) == (0.0))
+}
+
+// The wash behind a hugging overlay covers the overlay and no more.
+@Test
+function contentOverlayWashCoversTheOverlay() {
+    let tree = laidOut(tree: contentOverlayTree(), available: Size(width: 640.0, height: 480.0))
+    expect!((framesEqual(tree.frame(1), tree.frame(2))) == (true))
+    expect!((framesEqual(tree.frame(2), tree.frame(0))) == (true))
+}
+
+// A fixed badge in a 100 x 60 overlay is centred: (100 - 40) / 2 and (60 - 20) / 2.
+@Test
+function centredOverlayCentresItsFixedChild() {
+    let tree = laidOut(tree: centredOverlayTree(), available: Size(width: 640.0, height: 480.0))
+    expect!(
+        (framesEqual(tree.frame(0), Rect(x: 0.0, y: 0.0, width: 100.0, height: 60.0))) == (true)
+    )
+    expect!((tree.frame(1).x) == (30.0))
+    expect!((tree.frame(1).y) == (20.0))
+    expect!((framesEqual(tree.frame(2), tree.frame(0))) == (true))
+}
+
+// A fixed sidebar and a filling content area inside a 40-padded root: the sidebar
+// keeps its 250, the content takes the rest after the 40 gap.
+@Test
+function splitPlacesTheSidebarAndTheFillingContent() {
+    let tree = laidOut(tree: splitTree(), available: Size(width: 1280.0, height: 720.0))
+    expect!(
+        (framesEqual(tree.frame(0), Rect(x: 0.0, y: 0.0, width: 1280.0, height: 720.0))) == (true)
+    )
+    expect!(
+        (framesEqual(tree.frame(1), Rect(x: 40.0, y: 40.0, width: 250.0, height: 640.0))) == (true)
+    )
+    expect!(
+        (framesEqual(tree.frame(2), Rect(x: 330.0, y: 40.0, width: 910.0, height: 640.0))) == (true)
+    )
+}
+
+// Children hang from one line: the deepest baseline (18) is where it falls, and
+// every other child drops by the difference, so 12 becomes 6 and 14 becomes 4.
+@Test
+function baselineRowDropsEveryChildOntoTheSharedLine() {
+    let tree = laidOut(tree: baselineRowTree(), available: Size(width: 300.0, height: 800.0))
+    expect!((tree.frame(1).y) == (0.0))
+    expect!((tree.frame(2).y) == (6.0))
+    expect!((tree.frame(3).y) == (4.0))
+}
+
+// A filling child in a baseline row says nothing about the line: it takes the
+// row's height and the width left after the three leaves, 300 - 120 = 180.
+@Test
+function baselineRowFillChildTakesTheRowHeightAndTheLeftover() {
+    let tree = laidOut(tree: baselineRowTree(), available: Size(width: 300.0, height: 800.0))
+    expect!((tree.frame(4).height) == (24.0))
+    expect!((tree.frame(4).width) == (180.0))
+}
+
+// Placing a clean tree at a new origin moves every descendant by the same amount,
+// without recomputing their sizes.
+@Test
+function placingACleanTreeAtANewOriginMovesEverySubtree() {
+    var tree = laidOut(tree: retainedTree(), available: Size(width: 200.0, height: 200.0))
+    tree.markAllClean()
+    tree.place(index: 0, origin: Point(x: 50.0, y: 30.0))
+    expect!(
+        (framesEqual(tree.frame(0), Rect(x: 50.0, y: 30.0, width: 200.0, height: 200.0))) == (true)
+    )
+    expect!(
+        (framesEqual(tree.frame(1), Rect(x: 50.0, y: 30.0, width: 60.0, height: 40.0))) == (true)
+    )
+    expect!(
+        (framesEqual(tree.frame(2), Rect(x: 50.0, y: 70.0, width: 60.0, height: 40.0))) == (true)
+    )
+    expect!(
+        (framesEqual(tree.frame(3), Rect(x: 50.0, y: 30.0, width: 30.0, height: 20.0))) == (true)
+    )
+    expect!(
+        (framesEqual(tree.frame(4), Rect(x: 50.0, y: 70.0, width: 30.0, height: 20.0))) == (true)
+    )
+}

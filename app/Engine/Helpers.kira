@@ -1,0 +1,189 @@
+//! Resolution helpers for size modes, cross-axis alignment and stack sizing.
+//!
+//! Turns a size mode into a concrete extent once the offer and the content are known, and places a child
+//! on the cross axis of its container.
+import Foundation
+extend SizeMode {
+    /// Resolves this size mode to one extent along an axis, never negative.
+    ///
+    /// `Fixed` takes its value, `Fill` the available extent, `Hug` the content extent and `Fraction` the
+    /// available extent scaled by its fraction. `Min` and `Max` bound the content extent from below and above,
+    /// and `Reveal` shows a fraction of the content extent.
+    function resolve(available: Number, content: Number) -> Number {
+        match self {
+            Fixed(value) -> return nonNegative(value: value)
+            Fill -> return nonNegative(value: available)
+            Hug -> return nonNegative(value: content)
+            Fraction(of) -> return nonNegative(value: available * of)
+            Min(value) -> return content > value ? content : value
+            Max(value) -> return content < value ? content : value
+            Reveal(fraction) -> return nonNegative(value: content * fraction)
+        }
+    }
+
+    /// Like `resolve`, but the content extent includes `padding` on both sides of the axis.
+    ///
+    /// The padding counts toward `Hug`, `Min`, `Max` and `Reveal`, which measure the padded size. The other
+    /// modes do not read the content, so padding does not change them.
+    function resolveOuter(available: Number, content: Number, padding: Number) -> Number {
+        let outer = content + padding
+        match self {
+            Fixed(value) -> return nonNegative(value: value)
+            Fill -> return nonNegative(value: available)
+            Hug -> return nonNegative(value: outer)
+            Fraction(of) -> return nonNegative(value: available * of)
+            Min(value) -> return outer > value ? outer : value
+            Max(value) -> return outer < value ? outer : value
+            Reveal(fraction) -> return nonNegative(value: outer * fraction)
+        }
+    }
+
+    /// Whether this size mode is `Fill`.
+    function isFill() -> Bool {
+        match self {
+            Fill -> return true
+            Fixed(value) -> return false
+            Hug -> return false
+            Fraction(of) -> return false
+            Min(value) -> return false
+            Max(value) -> return false
+            Reveal(fraction) -> return false
+        }
+    }
+
+    /// Whether this size mode resolves from the node's content.
+    ///
+    /// That is `Hug`, the two content-versus-value modes `Min` and `Max`, and `Reveal`.
+    function usesContent() -> Bool {
+        match self {
+            Hug -> return true
+            Min(value) -> return true
+            Max(value) -> return true
+            Reveal(fraction) -> return true
+            Fixed(value) -> return false
+            Fill -> return false
+            Fraction(of) -> return false
+        }
+    }
+}
+
+/// The size a child adds to its parent's content extent on one axis.
+///
+/// Returns zero for a child that fills when the parent sizes from its content, and otherwise
+/// `childOuter`, the child's outer extent. A child that fills contributes NOTHING to a parent that
+/// sizes from its content: "fill the parent" cannot also mean "make the parent bigger", and resolving
+/// it as the offered size makes a hugging parent as large as whatever was offered to it. The child is
+/// resolved against the parent's final size in the placement pass instead, the main axis from the
+/// leftover space and the cross axis from the container, so it still fills exactly what it was asked to.
+public function contentExtent(
+    childOuter: Number,
+    child: borrow SizeMode,
+    parentUsesContent: Bool
+) -> Number {
+    if parentUsesContent && child.isFill() {
+        return 0.0
+    }
+    return childOuter
+}
+
+/// The offset that places a child of `childSize` inside `available` on the cross axis.
+///
+/// `Center` centres the child, `End` moves it to the far edge. `Start`, `Stretch` and `Baseline`
+/// return zero, because the child is placed at the leading edge and `Stretch` sizes it to fill.
+/// A negative result happens only when the child is larger than `available`.
+///
+public function crossOffset(
+    childSize: Number,
+    available: Number,
+    alignment: borrow CrossAlignment
+) -> Number {
+    match alignment {
+        Center -> return (available - childSize) / 2.0
+        End -> return available - childSize
+        Start -> return 0.0
+        Stretch -> return 0.0
+        Baseline -> return 0.0
+    }
+}
+
+extend SizeMode {
+    /// The main-axis extent of a stack child.
+    ///
+    /// A `Fill` child takes `flex` times `fillSize`. Any other child keeps its `current` extent.
+    function resolvedStackMainSize(current: Number, fillSize: Number, flex: Number) -> Number {
+        if self.isFill() {
+            return fillSize * Number(flex)
+        }
+        return current
+    }
+}
+
+extend CrossAlignment {
+    /// The cross-axis extent of a stack child inside a container whose cross extent is `available`.
+    ///
+    /// `Stretch` and `Fill` children take the whole cross extent less `marginTotal`, so a fill child fills the
+    /// container whatever the alignment. Any other child keeps its measured `current` extent, bounded by the
+    /// container so it does not hang past an edge the program stated.
+    function resolvedStackCrossSize(
+        cross: borrow SizeMode,
+        current: Number,
+        available: Number,
+        marginTotal: Number
+    ) -> Number {
+        if self == .Stretch || cross.isFill() {
+            return nonNegative(value: available - marginTotal)
+        }
+        // A child taller than the row it sits on (or wider than its column) is
+        // bounded by the container: centering it would hang it across both edges,
+        // over whatever is beside the stack. The container's extent is the one the
+        // program stated, so it is the one that governs.
+        let bound = nonNegative(value: available - marginTotal)
+        if available > 0.0 && current > bound {
+            return bound
+        }
+        return current
+    }
+}
+
+/// The origin of a `child` of size `child` placed inside `container`, offset from `origin` by `alignment`.
+///
+/// Horizontal and vertical offsets are computed independently from the free space on each axis. A
+/// child larger than the container gets a negative offset, so it runs past the container's edge.
+///
+public function alignedOrigin(
+    child: borrow Size,
+    container: borrow Size,
+    origin: borrow Point,
+    alignment: borrow Alignment
+) -> Point {
+    let centerX = (container.width - child.width) / 2.0
+    let trailingX = container.width - child.width
+    let centerY = (container.height - child.height) / 2.0
+    let bottomY = container.height - child.height
+    var dx = 0.0
+    var dy = 0.0
+    match alignment {
+        TopLeading -> {}
+        Top -> dx = centerX
+        TopTrailing -> dx = trailingX
+        Leading -> dy = centerY
+        Center -> {
+            dx = centerX
+            dy = centerY
+        }
+        Trailing -> {
+            dx = trailingX
+            dy = centerY
+        }
+        BottomLeading -> dy = bottomY
+        Bottom -> {
+            dx = centerX
+            dy = bottomY
+        }
+        BottomTrailing -> {
+            dx = trailingX
+            dy = bottomY
+        }
+    }
+    return Point(x: origin.x + dx, y: origin.y + dy)
+}

@@ -1,0 +1,92 @@
+//! Tests for the measure pass: the content size each arrangement reports and the fitting of rows.
+import Foundation
+import KiraLayout
+
+// The measure pass on its own: what a parent's size comes to from its children,
+// and how a row fits its children into the space it has. Subject:
+// app/Engine/Measure.kira.
+
+// A filling child is not counted in a content-sized parent's height, so the row
+// is as tall as its tallest fixed child. A filling row takes the whole offer width.
+@Test
+function contentRowIsTheOfferWideAndTheTallestFixedChildHigh() {
+    let tree = measuredOnly(contentRowTree(), Size(width: 300.0, height: 800.0))
+    expect!((tree.frame(0).width) == (300.0))
+    expect!((tree.frame(0).height) == (20.0))
+}
+
+// A hugging row is its children, the spacing between them, and its padding.
+@Test
+function hugRowWidthIsChildrenPlusSpacingPlusPadding() {
+    var tree = LayoutTree(
+        nodes: [stack(
+            width: .Hug,
+            height: .Hug,
+            axis: .Horizontal,
+            alignment: .Start,
+            spacing: 5.0,
+            padding: EdgeInsets(top: 1.0, trailing: 2.0, bottom: 3.0, leading: 4.0),
+            firstChild: 1,
+            childCount: 2
+        ), fixedLeaf(width: 60.0, height: 20.0), fixedLeaf(width: 40.0, height: 20.0)]
+    )
+    tree.measure(index: 0, available: Size(width: 300.0, height: 800.0))
+    expect!((tree.frame(0).width) == (111.0))
+    expect!((tree.frame(0).height) == (24.0))
+}
+
+// A hugging column is as wide as its widest child, and fills the height offered.
+@Test
+function contentColumnIsItsWidestChildAndTheOfferedHeight() {
+    let tree = measuredOnly(contentColumnTree(), Size(width: 500.0, height: 800.0))
+    expect!((tree.frame(0).width) == (60.0))
+    expect!((tree.frame(0).height) == (800.0))
+}
+
+// A hugging overlay is as large as its fixed child; the filling wash adds nothing.
+@Test
+function contentOverlayIsTheSizeOfItsFixedChild() {
+    let tree = measuredOnly(contentOverlayTree(), Size(width: 640.0, height: 480.0))
+    expect!((tree.frame(0).width) == (40.0))
+    expect!((tree.frame(0).height) == (20.0))
+}
+
+// Three fixed children in a row that is given room to spare: the row keeps the
+// offered width and is as tall as the children.
+@Test
+function fixedTrioRowIsTheOfferWideAndTheTallestChildHigh() {
+    let tree = measuredOnly(fixedTrioTree(), Size(width: 400.0, height: 200.0))
+    expect!((tree.frame(0).width) == (400.0))
+    expect!((tree.frame(0).height) == (48.0))
+    expect!((tree.frame(1).width) == (108.0))
+}
+
+// The same three children in a narrower row: they each give up the same share, so
+// the three fit in the 284 that is left after 16 of spacing.
+@Test
+function fixedTrioShrinksEachChildToFitANarrowRow() {
+    let tree = measuredOnly(fixedTrioTree(), Size(width: 300.0, height: 200.0))
+    expect!((tree.frame(0).width) == (300.0))
+    expect!((nearlyEqual(tree.frame(1).width, 284.0 / 3.0)) == (true))
+    expect!((nearlyEqual(tree.frame(2).width, 284.0 / 3.0)) == (true))
+    expect!((nearlyEqual(tree.frame(3).width, 284.0 / 3.0)) == (true))
+}
+
+// A baseline row is the line the children share plus the longest drop below it:
+// 18 above the line, and 6 below it from the 24-high run of text (18 + 6).
+@Test
+function baselineRowIsTheLinePlusTheDeepestDrop() {
+    let tree = measuredOnly(baselineRowTree(), Size(width: 300.0, height: 800.0))
+    expect!((tree.frame(0).height) == (24.0))
+}
+
+// A fixed sidebar keeps its declared width in the measure pass, and takes the
+// offered height less the root's padding.
+@Test
+function fixedSidebarKeepsItsDeclaredWidth() {
+    let tree = measuredOnly(splitTree(), Size(width: 1280.0, height: 720.0))
+    expect!((tree.frame(0).width) == (1280.0))
+    expect!((tree.frame(0).height) == (720.0))
+    expect!((tree.frame(1).width) == (250.0))
+    expect!((tree.frame(1).height) == (640.0))
+}

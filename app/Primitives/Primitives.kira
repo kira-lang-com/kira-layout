@@ -1,0 +1,16 @@
+//! Primitive value types of the layout engine: the edge insets used for padding and margin.
+import Foundation
+
+/// The distances a node insets its content, or sets its outside spacing, on each of its four edges.
+///
+/// Every edge defaults to zero. Used for both padding and margin on a `LayoutDescriptor`.
+public struct EdgeInsets {
+    /// The distance from the top edge, in layout units.
+    var top: Number = 0.0
+    /// The distance from the trailing edge, in layout units.
+    var trailing: Number = 0.0
+    /// The distance from the bottom edge, in layout units.
+    var bottom: Number = 0.0
+    /// The distance from the leading edge, in layout units.
+    var leading: Number = 0.0
+}

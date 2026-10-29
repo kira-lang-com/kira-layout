@@ -1,0 +1,327 @@
+//! Shared fixtures for the layout tests: tree builders for each arrangement and frame comparisons.
+import Foundation
+import KiraLayout
+
+// Tree builders shared by the test files. Each builder returns a tree that has
+// not been laid out yet. A test lays it out with `laidOut`, measures it with
+// `measuredOnly`, or runs one pass by hand when it needs to count.
+
+/// Insets with every edge at zero, for a node that has no padding or margin.
+function zeroInsets() -> EdgeInsets {
+    return EdgeInsets(top: 0.0, trailing: 0.0, bottom: 0.0, leading: 0.0)
+}
+
+/// A node with its descriptor already flattened into it.
+///
+/// `flatten` writes through the node it is called on, so the node is held in a variable first.
+function layoutNode(firstChild: Number, childCount: Number, desc: LayoutDescriptor) -> LayoutNode {
+    var node = LayoutNode(firstChild: firstChild, childCount: childCount)
+    node.flatten(desc: desc)
+    return node
+}
+
+/// A descriptor for a leaf with the given size modes and no padding, margin or arrangement of its own.
+function leafDescriptor(width: SizeMode, height: SizeMode) -> LayoutDescriptor {
+    return LayoutDescriptor(
+        width: width,
+        height: height,
+        arrange: .Fill,
+        axis: .Vertical,
+        alignment: .Stretch,
+        overlayAlignment: .Center,
+        padding: zeroInsets(),
+        margin: zeroInsets()
+    )
+}
+
+/// A leaf of a fixed `width` by `height`.
+function fixedLeaf(width: Number, height: Number) -> LayoutNode {
+    return layoutNode(
+        firstChild: 0,
+        childCount: 0,
+        desc: leafDescriptor(width: .Fixed(width), height: .Fixed(height))
+    )
+}
+
+/// A leaf that asks for whatever the parent has on both axes.
+function fillLeaf() -> LayoutNode {
+    return layoutNode(
+        firstChild: 0,
+        childCount: 0,
+        desc: leafDescriptor(width: .Fill, height: .Fill)
+    )
+}
+
+/// A leaf of a fixed size whose baseline sits `baseline` points below its top edge.
+function baselineLeaf(width: Number, height: Number, baseline: Number) -> LayoutNode {
+    return layoutNode(
+        firstChild: 0,
+        childCount: 0,
+        desc: LayoutDescriptor(
+            width: .Fixed(width),
+            height: .Fixed(height),
+            arrange: .Fill,
+            axis: .Vertical,
+            alignment: .Stretch,
+            overlayAlignment: .Center,
+            baseline: baseline,
+            padding: zeroInsets(),
+            margin: zeroInsets()
+        )
+    )
+}
+
+/// A stack node with the given axis, cross alignment, spacing and padding, and no margin.
+function stack(
+    width: SizeMode,
+    height: SizeMode,
+    axis: Axis,
+    alignment: CrossAlignment,
+    spacing: Number,
+    padding: EdgeInsets,
+    firstChild: Number,
+    childCount: Number
+) -> LayoutNode {
+    return layoutNode(
+        firstChild: firstChild,
+        childCount: childCount,
+        desc: LayoutDescriptor(
+            width: width,
+            height: height,
+            arrange: .Stack,
+            axis: axis,
+            spacing: spacing,
+            alignment: alignment,
+            overlayAlignment: .Center,
+            padding: padding,
+            margin: zeroInsets()
+        )
+    )
+}
+
+/// An overlay node with the given size modes that holds its children on top of one another.
+function overlayNode(
+    width: SizeMode,
+    height: SizeMode,
+    firstChild: Number,
+    childCount: Number
+) -> LayoutNode {
+    return layoutNode(
+        firstChild: firstChild,
+        childCount: childCount,
+        desc: LayoutDescriptor(
+            width: width,
+            height: height,
+            arrange: .Overlay,
+            axis: .Vertical,
+            alignment: .Center,
+            overlayAlignment: .Center,
+            padding: zeroInsets(),
+            margin: zeroInsets()
+        )
+    )
+}
+
+/// Both passes over a tree, the way a host runs them: measure, then place at the origin.
+function laidOut(tree: LayoutTree, available: Size) -> LayoutTree {
+    var laid = tree
+    laid.measure(index: 0, available: available)
+    laid.place(index: 0, origin: Point(x: 0.0, y: 0.0))
+    return laid
+}
+
+/// Only the measure pass, so a test sees what measuring alone decides.
+function measuredOnly(tree: LayoutTree, available: Size) -> LayoutTree {
+    var measured = tree
+    measured.measure(index: 0, available: available)
+    return measured
+}
+
+/// Whether two rectangles have the same origin and size, compared exactly.
+function framesEqual(a: borrow Rect, b: borrow Rect) -> Bool {
+    return a.x == b.x && a.y == b.y && a.width == b.width && a.height == b.height
+}
+
+/// Whether two frame values are equal within a millionth.
+///
+/// Frame values come out of Number arithmetic that can round, so a fraction of a width is compared with a
+/// tolerance rather than exactly.
+function nearlyEqual(a: Number, b: Number) -> Bool {
+    return abs(a - b) < 0.000001
+}
+
+/// The right edge of child `index`, which is where the next sibling may begin.
+function frameRight(tree: borrow LayoutTree, index: Number) -> Number {
+    let frame = tree.frame(index)
+    return frame.x + frame.width
+}
+
+// --- Trees under test --------------------------------------------------------
+
+/// A row that hugs its height and fills its width, holding a fixed label, a filling spacer and a fixed
+/// trailing control.
+///
+/// Laid out in 300 x 800.
+function contentRowTree() -> LayoutTree {
+    return LayoutTree(
+        nodes: [stack(
+            width: .Fill,
+            height: .Hug,
+            axis: .Horizontal,
+            alignment: .Center,
+            spacing: 0.0,
+            padding: zeroInsets(),
+            firstChild: 1,
+            childCount: 3
+        ), fixedLeaf(width: 60.0, height: 20.0), fillLeaf(), fixedLeaf(width: 40.0, height: 20.0)]
+    )
+}
+
+/// A column that hugs its width and fills its height, holding a fixed child, a filling child and a fixed
+/// child.
+///
+/// Laid out in 500 x 800.
+function contentColumnTree() -> LayoutTree {
+    return LayoutTree(
+        nodes: [stack(
+            width: .Hug,
+            height: .Fill,
+            axis: .Vertical,
+            alignment: .Start,
+            spacing: 0.0,
+            padding: zeroInsets(),
+            firstChild: 1,
+            childCount: 3
+        ), fixedLeaf(width: 60.0, height: 20.0), fillLeaf(), fixedLeaf(width: 30.0, height: 24.0)]
+    )
+}
+
+/// An overlay that hugs both axes, holding a fixed badge and a filling wash.
+///
+/// Laid out in 640 x 480.
+function contentOverlayTree() -> LayoutTree {
+    return LayoutTree(
+        nodes: [overlayNode(width: .Hug, height: .Hug, firstChild: 1, childCount: 2), fixedLeaf(
+            width: 40.0,
+            height: 20.0
+        ), fillLeaf()]
+    )
+}
+
+/// An overlay of fixed size 100 x 60 holding a fixed 40 x 20 badge and a wash.
+function centredOverlayTree() -> LayoutTree {
+    return LayoutTree(
+        nodes: [overlayNode(
+            width: .Fixed(100.0),
+            height: .Fixed(60.0),
+            firstChild: 1,
+            childCount: 2
+        ), fixedLeaf(width: 40.0, height: 20.0), fillLeaf()]
+    )
+}
+
+/// Three fixed 108 x 48 children in a row, 8 apart.
+///
+/// Laid out in a row of the width given.
+function fixedTrioTree() -> LayoutTree {
+    return LayoutTree(
+        nodes: [stack(
+            width: .Fill,
+            height: .Hug,
+            axis: .Horizontal,
+            alignment: .Center,
+            spacing: 8.0,
+            padding: zeroInsets(),
+            firstChild: 1,
+            childCount: 3
+        ), fixedLeaf(width: 108.0, height: 48.0), fixedLeaf(width: 108.0, height: 48.0), fixedLeaf(
+            width: 108.0,
+            height: 48.0
+        )]
+    )
+}
+
+/// A window split: a fixed sidebar beside filling content, inside a padded root.
+///
+/// Laid out in 1280 x 720.
+function splitTree() -> LayoutTree {
+    return LayoutTree(
+        nodes: [stack(
+            width: .Fixed(1280.0),
+            height: .Fixed(720.0),
+            axis: .Horizontal,
+            alignment: .Stretch,
+            spacing: 40.0,
+            padding: EdgeInsets(top: 40.0, trailing: 40.0, bottom: 40.0, leading: 40.0),
+            firstChild: 1,
+            childCount: 2
+        ), layoutNode(
+            firstChild: 0,
+            childCount: 0,
+            desc: leafDescriptor(width: .Fixed(250.0), height: .Fill)
+        ), fillLeaf()]
+    )
+}
+
+/// A nested tree with no flexible node in it, so every subtree can be reused when nothing changed.
+///
+/// Laid out in 200 x 200:
+///   0: 200 x 200 column, children 1 and 2
+///   1: 60 x 40 stack, child 3
+///   2: 60 x 40 stack, child 4
+///   3: 30 x 20 leaf
+///   4: 30 x 20 leaf
+function retainedTree() -> LayoutTree {
+    return LayoutTree(
+        nodes: [stack(
+            width: .Fixed(200.0),
+            height: .Fixed(200.0),
+            axis: .Vertical,
+            alignment: .Start,
+            spacing: 0.0,
+            padding: zeroInsets(),
+            firstChild: 1,
+            childCount: 2
+        ), stack(
+            width: .Fixed(60.0),
+            height: .Fixed(40.0),
+            axis: .Vertical,
+            alignment: .Start,
+            spacing: 0.0,
+            padding: zeroInsets(),
+            firstChild: 3,
+            childCount: 1
+        ), stack(
+            width: .Fixed(60.0),
+            height: .Fixed(40.0),
+            axis: .Vertical,
+            alignment: .Start,
+            spacing: 0.0,
+            padding: zeroInsets(),
+            firstChild: 4,
+            childCount: 1
+        ), fixedLeaf(width: 30.0, height: 20.0), fixedLeaf(width: 30.0, height: 20.0)]
+    )
+}
+
+/// A baseline row: a large run of text, a small one, a glyph beside them and a filling spacer.
+///
+/// Baselines sit 18, 12 and 14 down from each leaf's top edge. Laid out in 300 x 800.
+function baselineRowTree() -> LayoutTree {
+    return LayoutTree(
+        nodes: [stack(
+            width: .Fill,
+            height: .Hug,
+            axis: .Horizontal,
+            alignment: .Baseline,
+            spacing: 0.0,
+            padding: zeroInsets(),
+            firstChild: 1,
+            childCount: 4
+        ), baselineLeaf(width: 60.0, height: 24.0, baseline: 18.0), baselineLeaf(
+            width: 40.0,
+            height: 16.0,
+            baseline: 12.0
+        ), baselineLeaf(width: 20.0, height: 20.0, baseline: 14.0), fillLeaf()]
+    )
+}

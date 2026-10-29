@@ -1,0 +1,115 @@
+//! Sizing rules: the space a child is offered on each axis, and the outer extent it takes in its parent.
+//!
+//! Clamps extents to zero, removes stack spacing and child margins from an offer, and gives the outer edges
+//! of a node including its margins and offset.
+import Foundation
+
+/// `value` clamped up to zero.
+///
+/// Zero for any value that is not greater than zero, including a negative one. Used wherever a
+/// computed extent would otherwise go below zero.
+///
+public function nonNegative(value: Number) -> Number {
+    return value > 0.0 ? value : 0.0
+}
+
+/// The total space taken by `spacing` placed between `count` items.
+///
+/// Returns `(count - 1) * spacing`, or zero when `count` is 1 or less, so a single item or an
+/// empty run has no gaps. Used to take the gaps out of a stack or a grid before its children are sized.
+///
+public function repeatedSpacing(count: Number, spacing: Number) -> Number {
+    if count <= 1 {
+        return 0.0
+    }
+    return Number(count - 1) * spacing
+}
+
+extend LayoutNode {
+    /// The width this node occupies in its parent: the measured width plus both horizontal margins.
+    function outerWidth() -> Number {
+        return self.measuredW + self.marL + self.marR
+    }
+
+    /// The height this node occupies in its parent: the measured height plus both vertical margins.
+    function outerHeight() -> Number {
+        return self.measuredH + self.marT + self.marB
+    }
+
+    /// The right edge of this node in its parent: its `dx` offset plus its outer width.
+    ///
+    /// Takes `borrow LayoutNode`, so callers can pass `tree.nodes[i]` directly and the array read is not
+    /// copied as a whole node.
+    function outerRight() -> Number {
+        return self.dx + self.measuredW + self.marL + self.marR
+    }
+
+    /// The bottom edge of this node in its parent: its `dy` offset plus its outer height.
+    function outerBottom() -> Number {
+        return self.dy + self.measuredH + self.marT + self.marB
+    }
+}
+
+/// The extent a child is offered along one axis, given its size mode and the extent its parent has available.
+///
+/// `Fixed` and `Fill` and `Fraction` are clamped with `nonNegative`. `Min` takes the larger of the
+/// available extent and its minimum, and `Max` the smaller of the available extent and its maximum.
+/// `Hug` and `Reveal` are offered the whole available extent, because their final size depends on
+/// what their content measures, not on the offer.
+///
+public function constrainedChildAxisOffer(
+    parentAvailable: Number,
+    mode: borrow SizeMode
+) -> Number {
+    match mode {
+        Fixed(value) -> return nonNegative(value: value)
+        Fill -> return nonNegative(value: parentAvailable)
+        Fraction(of) -> return nonNegative(value: parentAvailable * of)
+        Min(value) -> return parentAvailable > value ? parentAvailable : value
+        Max(value) -> return parentAvailable < value ? parentAvailable : value
+        Hug -> return parentAvailable
+        Reveal(fraction) -> return parentAvailable
+    }
+}
+
+/// The size offered to one child of `parent`, after the parent's own spacing and its size rules are taken out.
+///
+/// Starts from `parentAvailable`. In a `Stack`, the total spacing between `childCount` children is
+/// removed from the main axis. In a `Grid` with at least one column, the column gaps are removed and
+/// the width is divided evenly across the columns. In an `Overlay`, each axis takes the child-axis
+/// offer from `constrainedChildAxisOffer`. The child's own margins are removed last, and the result
+/// is never negative.
+///
+public function childAvailableSize(
+    parentAvailable: borrow Size,
+    parent: borrow LayoutNode,
+    child: borrow LayoutNode,
+    childCount: Number
+) -> Size {
+    var width = parentAvailable.width
+    var height = parentAvailable.height
+
+    if parent.arrange == .Stack {
+        let totalSpacing = repeatedSpacing(count: childCount, spacing: parent.spacing)
+        if parent.axis == .Horizontal {
+            width = width - totalSpacing
+        } else {
+            height = height - totalSpacing
+        }
+    }
+
+    if parent.arrange == .Grid {
+        if parent.columns > 0 {
+            let totalSpacing = repeatedSpacing(count: parent.columns, spacing: parent.spacing)
+            width = (width - totalSpacing) / Number(parent.columns)
+        }
+    } else if parent.arrange == .Overlay {
+        width = constrainedChildAxisOffer(parentAvailable.width, parent.width)
+        height = constrainedChildAxisOffer(parentAvailable.height, parent.height)
+    }
+
+    return Size(
+        width: nonNegative(value: width - (child.marL + child.marR)),
+        height: nonNegative(value: height - (child.marT + child.marB))
+    )
+}

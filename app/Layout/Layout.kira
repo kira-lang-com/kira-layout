@@ -1,0 +1,100 @@
+//! Enumerations that describe how a layout node sizes, aligns and arranges its children.
+
+/// The direction a stack lays its children out along.
+public enum Axis {
+    /// Children run from the leading edge to the trailing edge.
+    Horizontal
+    /// Children run from the top edge to the bottom edge.
+    Vertical
+}
+
+/// How a child is placed on the axis across its parent stack.
+///
+/// `Start`, `Center` and `End` place a child at the matching edge of the cross extent, or in its
+/// middle. `Stretch` sizes the child to the full cross extent.
+public enum CrossAlignment {
+    /// The child sits at the leading edge of the cross axis.
+    Start
+    /// The child is centred on the cross axis.
+    Center
+    /// The child sits at the trailing edge of the cross axis.
+    End
+    /// The child is sized to the full cross extent of its stack.
+    Stretch
+    /// Children of a horizontal stack line up on the BASELINE each one reports
+    /// rather than on an edge or a center. A run of text reports where its
+    /// letters sit; anything else reports its bottom edge, which is what a glyph
+    /// or a control standing beside a word aligns to.
+    Baseline
+}
+
+/// Where a child sits inside a two-dimensional container, for an overlay or an absolute arrangement.
+public enum Alignment {
+    /// Top edge and leading edge.
+    TopLeading
+    /// Top edge, centred horizontally.
+    Top
+    /// Top edge and trailing edge.
+    TopTrailing
+    /// Leading edge, centred vertically.
+    Leading
+    /// Centred on both axes.
+    Center
+    /// Trailing edge, centred vertically.
+    Trailing
+    /// Bottom edge and leading edge.
+    BottomLeading
+    /// Bottom edge, centred horizontally.
+    Bottom
+    /// Bottom edge and trailing edge.
+    BottomTrailing
+}
+
+/// How a node's extent on one axis is chosen.
+///
+/// Each case resolves against the space offered by the parent and the size of the node's content.
+/// The resolution is performed by `SizeMode.resolve`, and the result is never negative.
+public enum SizeMode {
+    /// A fixed extent in points. A negative value resolves to zero.
+    Fixed(Number)
+    /// Takes all of the space the parent offers on this axis.
+    Fill
+    /// Takes the extent of the node's content, including its padding.
+    Hug
+    /// The parent's offered space multiplied by this fraction.
+    Fraction(Number)
+    /// The larger of the content extent and this minimum.
+    Min(Number)
+    /// The smaller of the content extent and this maximum.
+    Max(Number)
+    /// Hug the content, then take this fraction of it.
+    ///
+    /// A drawer, a disclosure, a submenu growing out of the row that owns it.
+    /// The content is MEASURED at its natural size and the node's own extent is
+    /// the fraction — so the children inside are laid out full size and are
+    /// progressively uncovered, rather than being squashed toward zero. What
+    /// hides the remainder is the node's own clip.
+    ///
+    /// This is a size mode rather than arithmetic at the call site because only
+    /// layout knows what the content came to. A caller that multiplies a row
+    /// height by a child count is guessing, and guesses wrong the moment one row
+    /// is taller than the others.
+    Reveal(Number)
+}
+
+/// How a node arranges its children inside its own box.
+public enum ArrangeMode {
+    /// Children follow one another along `axis`, separated by `spacing`.
+    Stack
+    /// Each child is placed at its own `x` and `y` offset.
+    Absolute
+    /// Children fill cells of a grid with `columns` columns.
+    Grid
+    /// Children flow from left to right and start a new row, `rowSpacing` below the last, when the
+    /// next child would pass the offered width. The `axis` is not consulted.
+    Wrap
+    /// Every child occupies the same box, aligned by the node's `overlayAlignment`, in z-order.
+    Overlay
+    /// Each child is given the node's whole inner box, less its own margins, at the same origin.
+    Fill
+}
