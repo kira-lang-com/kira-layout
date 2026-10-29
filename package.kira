@@ -2,6 +2,6 @@
 //!
 //! The package is a library. [`LayoutTree`] holds the nodes, and the passes in the engine fill in their frames.
 construct KiraLayout extends Package {
-    let version: String = "0.1.0"
+    let version: String = "26.10.4"
     let kind: PackageKind = .Library
 }
